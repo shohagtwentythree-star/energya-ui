@@ -264,7 +264,7 @@ export default function CartBridge() {
                 <div key={c._id} className="bg-slate-900 p-5 rounded-2xl border border-slate-800 space-y-4 relative overflow-hidden">
                   {/* Remove Button */}
                   <button 
-                    onClick={() => removeFromCart(c._id)}
+                    onDoubleClick={() => removeFromCart(c._id)}
                     className="absolute top-4 right-4 text-slate-600 hover:text-red-500 transition-colors p-2"
                     title="Remove from Cart"
                   >

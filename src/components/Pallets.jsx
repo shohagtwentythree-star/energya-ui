@@ -447,53 +447,64 @@ const parsePlateData = (input) => {
 }
 
 // ---------- ROW ----------
-const PlateRow = ({ plate, onRemove }) => (
-  <div className="px-6 py-4 flex justify-between items-center group hover:bg-slate-800/30 transition-colors">
-    <div className="space-y-1">
-      <div className="font-mono text-base text-slate-100 font-bold tracking-tight group-hover:text-sky-400 transition-colors">
-        {plate.mark}
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        <Spec value={`L ${plate.length}`} />
-        <Spec value={`W ${plate.width}`} />
-        <Spec value={`T ${plate.thickness}`} />
-        <Spec value={`H ${plate.numberOfHoles}`} />
-      </div>
-
-      {plate.drawings && plate.drawings.length > 0 && (
-  <div className="mt-2 space-y-1">
-    {plate.drawings.map((d, i) => (
-      <div
-        key={i}
-        className="flex justify-between items-center bg-slate-800/30 px-2 py-1 rounded text-[10px] font-mono text-emerald-400"
-      >
-        <span className="font-bold">DR: {d.drawingNumber}</span>
-        <span className="text-sky-400 font-semibold">Qty: {d.requiredQuantity}</span>
-      </div>
-    ))}
-
-    <div className="text-[10px] font-bold text-sky-400 mt-1">
-      Total Required: {plate.totalRequired}
-    </div>
-  </div>
-)}
-
-    </div>
-
-    {onRemove && (
-      <button
-        onDoubleClick={() => onRemove(plate.mark)}
-        className="w-10 h-10 flex items-center justify-center rounded-xl text-slate-700 hover:bg-red-500/10 hover:text-red-500 opacity-0 group-hover:opacity-100"
-      >
-        <span className="text-xl">×</span>
-      </button>
-    )}
+const Spec = ({ label, value }) => (
+  <div className="flex items-center gap-1 bg-slate-950/50 px-1.5 py-0.5 rounded border border-white/5">
+    <span className="text-[9px] font-black text-slate-500 uppercase">{label}</span>
+    <span className="text-[10px] font-bold text-slate-300">{value}</span>
   </div>
 );
 
-const Spec = ({ value }) => (
-  <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-950 text-slate-500 border border-slate-800">
-    {value}
-  </span>
+const PlateRow = ({ plate, onRemove }) => (
+  <div className="relative px-4 py-3 flex justify-between items-center group hover:bg-white/[0.02] border-b border-white/5 transition-all">
+    {/* Active Accent Bar */}
+    <div className="absolute left-0 top-2 bottom-2 w-0.5 bg-sky-500/0 group-hover:bg-sky-500 transition-all rounded-r shadow-[0_0_8px_#0ea5e9]" />
+
+    <div className="flex-1 min-w-0">
+      <div className="flex items-center gap-3 mb-1.5">
+        <div className="font-mono text-lg text-slate-100 font-black tracking-tighter group-hover:text-sky-400 transition-colors">
+          {plate.mark}
+        </div>
+        {/* Quick Badge for Total */}
+        <div className="bg-sky-500/10 text-sky-400 text-[10px] px-2 py-0.5 rounded font-black border border-sky-500/20">
+          REQ: {plate.totalRequired}
+        </div>
+      </div>
+
+      {/* Primary Specs */}
+      <div className="flex flex-wrap gap-1.5">
+        <Spec label="L" value={plate.length} />
+        <Spec label="W" value={plate.width} />
+        <Spec label="T" value={plate.thickness} />
+        <Spec label="H" value={plate.numberOfHoles || 0} />
+      </div>
+
+      {/* Drawing Breakdown - Compact Grid */}
+      {plate.drawings && plate.drawings.length > 0 && (
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+          {plate.drawings.map((d, i) => (
+            <div
+              key={i}
+              className="flex justify-between items-center bg-emerald-500/5 border border-emerald-500/10 px-2 py-1 rounded-md text-[10px] font-mono"
+            >
+              <span className="text-slate-400 font-bold"># {d.drawingNumber}</span>
+              <span className="text-emerald-400 font-black italic">Qty {d.requiredQuantity}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+
+    {/* Actions */}
+    {onRemove && (
+      <div className="ml-4 opacity-0 group-hover:opacity-100 transition-all transform translate-x-2 group-hover:translate-x-0">
+        <button
+          onClick={() => onRemove(plate.mark)} // Removed doubleClick for better mobile feel, but you can revert
+          className="w-9 h-9 flex items-center justify-center rounded-lg bg-red-500/5 text-red-500/50 hover:bg-red-500/20 hover:text-red-500 border border-red-500/10 transition-all"
+          title="Remove Item"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+        </button>
+      </div>
+    )}
+  </div>
 );
