@@ -20,5 +20,12 @@ export default function DataPanel({ data = {}, label = "Data", maxHeight = 300 }
 }
 
 /* 
+
+
+
 <DataPanel data={{ pallets: allPallets, drawings }} label="Diagnostics" maxHeight={400} />
+
+
+
+
 */
