@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import DataPanel from "./DataPanel";
 
 const API_URL = 'http://localhost:3000/drawings';
 
@@ -7,15 +8,29 @@ export default function AddDrawingView({ onCancel, onSuccess }) {
     drawingNumber: '',
     dwgQty: 1,
     deliveryDate: '',
+    status: 'new',
     deliverTo: '', 
     plates: [{ mark: '', l: 0, w: 0, t: 0, h: 0, qty: 1, weight: 0, foundCount: 0 }]
   });
-
+  
+  const [teams, setTeams] = useState([]);
+  
   const handlePlateChange = (index, field, value) => {
     const updatedPlates = [...newDwg.plates];
     updatedPlates[index][field] = value;
     setNewDwg({ ...newDwg, plates: updatedPlates });
   };
+  
+  const fetchTeams = async () => {
+    try {
+      const response = await fetch('http://localhost:3000/fabricators');
+      const result = await response.json();
+      if (result.status === "success") setTeams(result.data);
+    } catch (error) { console.error("Fetch error:", error); }
+    finally { setLoading(false); }
+  };
+  
+  useEffect(() => { fetchTeams(); }, []);
 
   const addPlateField = () => {
     setNewDwg({ 
@@ -55,6 +70,12 @@ export default function AddDrawingView({ onCancel, onSuccess }) {
             Cancel
           </button>
         </div>
+        
+        
+
+
+<DataPanel data={{ teams }} label="Diagnostics" maxHeight={400} />
+
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Main Info Card - Reduced Padding */}
@@ -73,11 +94,37 @@ export default function AddDrawingView({ onCancel, onSuccess }) {
                 value={newDwg.dwgQty} onChange={e => setNewDwg({...newDwg, dwgQty: e.target.value})} />
             </div>
 
-            <div>
-              <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Fabricator</label>
-              <input required type="text" placeholder="Fab #01" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white font-bold outline-none focus:ring-2 focus:ring-sky-500/50" 
-                onChange={e => setNewDwg({...newDwg, deliverTo: e.target.value})} />
-            </div>
+         
+{/* 2. The JSX component */}
+<div>
+  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">
+    Fabricator
+  </label>
+  
+  <div className="relative">
+    <select 
+      required 
+      value={newDwg.deliverTo || ""} 
+      className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white font-bold outline-none focus:ring-2 focus:ring-sky-500/50 appearance-none cursor-pointer"
+      onChange={e => setNewDwg({...newDwg, deliverTo: e.target.value})}
+    >
+      <option value="" disabled>Select Fab Team</option>
+      
+      {teams.map((team, index) => (
+        <option key={index} value={team.teamLead} className="bg-slate-900">
+          {team.teamLead}
+        </option>
+      ))}
+    </select>
+
+    {/* Custom Arrow Icon for better UX */}
+    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400">
+      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+      </svg>
+    </div>
+  </div>
+</div>
 
             <div className="col-span-2 md:col-span-1">
               <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Delivery Date</label>
