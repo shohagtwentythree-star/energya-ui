@@ -137,21 +137,39 @@ export default function Drawings() {
         </div>
       </div>
 
-      {/* STATUS TABS */}
-      <div className="flex overflow-x-auto pb-4 gap-2 scrollbar-hide">
-        {STATUS_WORKFLOW.map((status) => (
-          <button
-            key={status}
-            onClick={() => setActiveStatus(status)}
-            className={`flex items-center gap-3 px-6 py-3 rounded-xl text-xs font-black uppercase transition-all border ${activeStatus === status ? 'bg-sky-600 border-sky-400 text-white shadow-xl scale-105' : 'bg-slate-800/40 border-slate-700 text-slate-500 hover:text-slate-300'}`}
-          >
-            {status}
-            <span className={`px-2 py-0.5 rounded-md text-[10px] ${activeStatus === status ? 'bg-white/20' : 'bg-slate-700'}`}>
-              {drawings.filter(d => d.status === status).length}
-            </span>
-          </button>
-        ))}
-      </div>
+{/* STATUS TABS */}
+<div className="flex overflow-x-auto pb-6 gap-3 scrollbar-hide snap-x">
+  {STATUS_WORKFLOW.map((status) => {
+    const isActive = activeStatus === status;
+    const count = drawings.filter((d) => d.status === status).length;
+
+    return (
+      <button
+        key={status}
+        onClick={() => setActiveStatus(status)}
+        className={`
+          flex items-center gap-4 px-5 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-wider 
+          transition-all duration-300 snap-start whitespace-nowrap border
+          ${isActive 
+            ? 'bg-gradient-to-r from-sky-600 to-blue-600 border-sky-400 text-white shadow-[0_0_20px_rgba(2,132,199,0.3)] scale-[1.02]' 
+            : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:border-slate-600 hover:bg-slate-800/60'
+          }
+        `}
+      >
+        {status}
+        <span 
+          className={`
+            flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full font-mono text-[10px]
+            ${isActive ? 'bg-white text-sky-700' : 'bg-slate-800 text-slate-300'}
+          `}
+        >
+          {count}
+        </span>
+      </button>
+    );
+  })}
+</div>
+
 
       {/* DESKTOP TABLE */}
       <div className="hidden md:block overflow-hidden bg-slate-900/40 rounded-2xl border border-slate-800">

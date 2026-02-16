@@ -5,6 +5,18 @@ const API_URL = 'http://localhost:3000';
 const API_PALLETS = API_URL + "/pallets";
 const API_DRAWINGS = API_URL + "/drawings";
 
+// --- ICONS ---
+const Icons = {
+  Cube: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>,
+  Search: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>,
+  Trash: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>,
+  ArrowRight: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>,
+  Link: () => <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>,
+  Save: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>,
+  Refresh: ({ spin }) => <svg className={`w-4 h-4 ${spin ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>,
+};
+
+
 export default function Pallets() {
   const [allPallets, setAllPallets] = useState([]);
   const [drawings, setDrawings] = useState([]);
@@ -157,28 +169,47 @@ const parsePlateData = (input) => {
   };
 };
 
+  // --- HELPERS ---
+  const getCoordKey = (obj) => `${obj?.x || 0}-${obj?.y || 0}-${obj?.z || 0}`;
+
+  const coordKey = getCoordKey(activeCoord);
+
   // -------- ORDER UPDATE --------
-  const updateOrderNumber = async () => {
-    if (!currentPalletDoc) {
-      showFeedback("Add plate first to create pallet", "error");
-      return;
-    }
+  // -------- FIXED ORDER UPDATE --------
+const updateOrderNumber = async () => {
+  // 1. Check if we actually have a pallet to update
+  if (!currentPalletDoc?._id) {
+    // If the user types an order number but there are no plates, 
+    // we can't update a document that doesn't exist in MongoDB yet.
+    showFeedback("Add at least one plate first", "error");
+    return;
+  }
 
-    try {
-      const res = await fetch(`${API_PALLETS}/${currentPalletDoc._id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderNumber: orderInput.toUpperCase() })
-      });
+  const cleanOrder = orderInput.trim().toUpperCase();
+  
+  // 2. Optimization: Don't call API if the value hasn't actually changed
+  if (cleanOrder === currentPalletDoc.orderNumber) return;
 
-      if (res.ok) {
-        showFeedback("Order Updated", "success");
-        fetchPallets();
-      }
-    } catch {
-      showFeedback("Update failed", "error");
+  try {
+    const res = await fetch(`${API_PALLETS}/${currentPalletDoc._id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderNumber: cleanOrder })
+    });
+
+    if (res.ok) {
+      showFeedback("Order Updated", "success");
+      // 3. Immediately update local state so the UI doesn't "flicker" back
+      setAllPallets(prev => prev.map(p => 
+        p._id === currentPalletDoc._id ? { ...p, orderNumber: cleanOrder } : p
+      ));
+      fetchPallets(); // Refresh background data
     }
-  };
+  } catch (error) {
+    showFeedback("Update failed", "error");
+  }
+};
+
 
   // -------- ADD --------
   const addPlate = async () => {
@@ -305,45 +336,42 @@ const parsePlateData = (input) => {
             {message.text}
           </div>
         )}
+        
+         {/* B. ORDER NUMBER (Integrated Style) */}
+                <div className="flex-1 bg-slate-900/60 rounded-xl border border-slate-800 p-3 flex items-center gap-3">
+                     <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-2">Order No.</span>
+                     <input
+                        className="flex-1 bg-slate-950 border border-slate-800 text-slate-200 text-sm font-mono font-bold rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-500/50 uppercase placeholder-slate-700 transition-all"
+                        placeholder="NO ORDER ASSIGNED"
+                        value={orderInput}
+                        onChange={(e) => setOrderInput(e.target.value)}
+                        onBlur={updateOrderNumber}
+                    />
+                     <button 
+                        onClick={updateOrderNumber} 
+                        className="p-2 bg-slate-800 hover:bg-emerald-600 text-slate-400 hover:text-white rounded-lg transition-colors border border-slate-700"
+                        title="Save Order Number"
+                    >
+                        <Icons.Save />
+                     </button>
+                </div>
 
-        {/* ORDER HEADER */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-col">
-            <span className="text-[10px] font-black text-slate-500 uppercase tracking-tighter">
-              Current Pallet
-            </span>
-            <input
-              className="bg-transparent text-xl font-black text-white outline-none placeholder:text-slate-700 w-32"
-              placeholder="NO ORDER"
-              value={orderInput}
-              onChange={(e) => setOrderInput(e.target.value)}
-              onBlur={updateOrderNumber}
-            />
-          </div>
 
-          <button
-            onClick={updateOrderNumber}
-            className="text-[10px] bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded-lg font-bold border border-slate-700"
-          >
-            UPDATE ORDER
-          </button>
-        </div>
-
-        {/* COORD SELECTOR */}
-        <div className="grid grid-cols-2 gap-4">
-          {['x', 'y'].map((axis) => (
-            <div key={axis} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
-              <span className="font-black text-slate-500 uppercase">{axis}</span>
-              <div className="flex items-center gap-4">
-                <button onClick={() => adjust(axis, -1)} className="w-8 h-8 rounded-full bg-slate-800">-</button>
-                <span className="text-2xl font-mono font-black text-sky-400">
-                  {activeCoord[axis]}
-                </span>
-                <button onClick={() => adjust(axis, 1)} className="w-8 h-8 rounded-full bg-slate-800">+</button>
-              </div>
+ <div className="bg-slate-900/40 p-3 rounded-2xl border border-slate-800/50 backdrop-blur-sm">
+               
+                <div className="grid grid-cols-2 gap-4">
+                {["x", "y"].map((axis) => (
+                    <div key={axis} className="bg-slate-950 rounded-xl p-1.5 flex items-center border border-slate-800 shadow-inner">
+                        <button onClick={() => setActiveCoord(p => ({ ...p, [axis]: Math.max(0, p[axis] - 1) }))} className="w-10 h-10 rounded-lg bg-slate-900 text-slate-400 hover:bg-sky-600 hover:text-white transition-colors flex items-center justify-center font-black text-lg active:scale-95 transform"> − </button>
+                        <div className="flex-1 flex flex-col items-center">
+                            <span className="text-[8px] text-slate-500 font-bold uppercase">{axis.toUpperCase()} AXIS</span>
+                            <span className="text-xl font-mono font-bold text-sky-400 leading-none">{activeCoord[axis] || 0}</span>
+                        </div>
+                        <button onClick={() => setActiveCoord(p => ({ ...p, [axis]: (p[axis] || 0) + 1 }))} className="w-10 h-10 rounded-lg bg-slate-900 text-slate-400 hover:bg-emerald-500 hover:text-white transition-colors flex items-center justify-center font-black text-lg active:scale-95 transform"> + </button>
+                    </div>
+                ))}
+                </div>
             </div>
-          ))}
-        </div>
 
 {/* COMMAND BAR */}
 <div className="sticky top-4 z-40">
@@ -447,62 +475,77 @@ const parsePlateData = (input) => {
 }
 
 // ---------- ROW ----------
+
 const Spec = ({ label, value }) => (
-  <div className="flex items-center gap-1 bg-slate-950/50 px-1.5 py-0.5 rounded border border-white/5">
-    <span className="text-[9px] font-black text-slate-500 uppercase">{label}</span>
-    <span className="text-[10px] font-bold text-slate-300">{value}</span>
+  <div className="flex items-center gap-1.5 bg-slate-400/5 px-2 py-1 rounded border border-white/5 group-hover:border-white/10 transition-colors">
+    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest leading-none">{label}</span>
+    <span className="text-xs font-mono font-medium text-slate-200 leading-none">{value}</span>
   </div>
 );
 
 const PlateRow = ({ plate, onRemove }) => (
-  <div className="relative px-4 py-3 flex justify-between items-center group hover:bg-white/[0.02] border-b border-white/5 transition-all">
-    {/* Active Accent Bar */}
-    <div className="absolute left-0 top-2 bottom-2 w-0.5 bg-sky-500/0 group-hover:bg-sky-500 transition-all rounded-r shadow-[0_0_8px_#0ea5e9]" />
+  <div className="group relative px-5 py-4 flex justify-between items-center bg-slate-900/20 hover:bg-slate-800/40 border-b border-white/5 transition-all duration-200">
+    
+    {/* Side Indicator */}
+    <div className="absolute left-0 top-0 bottom-0 w-1 bg-sky-500 opacity-0 group-hover:opacity-100 transition-opacity" />
 
     <div className="flex-1 min-w-0">
-      <div className="flex items-center gap-3 mb-1.5">
-        <div className="font-mono text-lg text-slate-100 font-black tracking-tighter group-hover:text-sky-400 transition-colors">
+      <div className="flex items-center gap-3 mb-2">
+        <h3 className="font-mono text-lg text-white font-bold tracking-tight uppercase">
           {plate.mark}
-        </div>
-        {/* Quick Badge for Total */}
-        <div className="bg-sky-500/10 text-sky-400 text-[10px] px-2 py-0.5 rounded font-black border border-sky-500/20">
+        </h3>
+        <div className="bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/20 text-[10px] font-black text-sky-400 uppercase">
           REQ: {plate.totalRequired}
         </div>
       </div>
 
-      {/* Primary Specs */}
-      <div className="flex flex-wrap gap-1.5">
-        <Spec label="L" value={plate.length} />
-        <Spec label="W" value={plate.width} />
-        <Spec label="T" value={plate.thickness} />
-        <Spec label="H" value={plate.numberOfHoles || 0} />
+      <div className="flex flex-wrap gap-2">
+        {/* Simplified Spec Inline */}
+        {[
+          ['L', plate.length],
+          ['W', plate.width],
+          ['T', plate.thickness],
+          ['H', plate.numberOfHoles || 0]
+        ].map(([label, val]) => (
+          <div key={label} className="flex gap-1.5 bg-white/5 px-2 py-1 rounded border border-white/5 text-[11px]">
+            <span className="text-slate-500 font-bold uppercase">{label}</span>
+            <span className="text-slate-200 font-mono">{val}</span>
+          </div>
+        ))}
       </div>
 
-      {/* Drawing Breakdown - Compact Grid */}
-      {plate.drawings && plate.drawings.length > 0 && (
-        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+      {plate.drawings?.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
           {plate.drawings.map((d, i) => (
-            <div
-              key={i}
-              className="flex justify-between items-center bg-emerald-500/5 border border-emerald-500/10 px-2 py-1 rounded-md text-[10px] font-mono"
-            >
-              <span className="text-slate-400 font-bold"># {d.drawingNumber}</span>
-              <span className="text-emerald-400 font-black italic">Qty {d.requiredQuantity}</span>
+            <div key={i} className="flex items-center gap-2 bg-emerald-500/5 border border-emerald-500/10 px-2 py-1 rounded text-[10px]">
+              <span className="text-slate-400 font-mono"># {d.drawingNumber}</span>
+              <span className="text-emerald-400 font-bold italic">Qty {d.requiredQuantity}</span>
             </div>
           ))}
         </div>
       )}
     </div>
 
-    {/* Actions */}
+    {/* Action Button - Forced Visibility Check */}
     {onRemove && (
-      <div className="ml-4 opacity-0 group-hover:opacity-100 transition-all transform translate-x-2 group-hover:translate-x-0">
+      <div className="ml-4 shrink-0">
         <button
-          onClick={() => onRemove(plate.mark)} // Removed doubleClick for better mobile feel, but you can revert
-          className="w-9 h-9 flex items-center justify-center rounded-lg bg-red-500/5 text-red-500/50 hover:bg-red-500/20 hover:text-red-500 border border-red-500/10 transition-all"
-          title="Remove Item"
+          onDoubleClick={() => onRemove(plate.mark)}
+          className="p-3 rounded-lg bg-red-500/10 text-red-200 sm:opacity-0 group-hover:opacity-100 hover:bg-red-900 hover:text-white transition-all duration-200"
+          aria-label="Delete"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+          <svg 
+            width="20" 
+            height="20" 
+            viewBox="0 0 24 24" 
+            fill="none" 
+            stroke="currentColor" 
+            strokeWidth="2.5" 
+            strokeLinecap="round" 
+            strokeLinejoin="round"
+          >
+            <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+          </svg>
         </button>
       </div>
     )}
