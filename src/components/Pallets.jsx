@@ -322,8 +322,8 @@ const updateOrderNumber = async () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 p-4 font-sans selection:bg-sky-500/30">
-      <div className="max-w-2xl mx-auto space-y-6">
+    <div className="min-h-screen bg-slate-950 text-slate-200 p-3 font-sans selection:bg-sky-500/30">
+      <div className="max-w-2xl mx-auto space-y-3">
 
         {/* TOAST */}
         {message.text && (
@@ -416,7 +416,17 @@ const updateOrderNumber = async () => {
           <div className="divide-y divide-slate-800/50">
             {filteredActivePlates.length > 0 ? (
               filteredActivePlates.map((plate, i) => (
-                <PlateRow key={i} plate={plate} onRemove={removePlate} />
+      <PlateRow 
+        key={i} 
+        plate={plate} 
+        onRemove={removePlate} 
+        // 👇 Add these new props here
+        allPallets={allPallets}
+        activeCoord={activeCoord}
+        activeZ={activeZ}
+        setActiveCoord={setActiveCoord}
+        setInputValue={setInputValue}
+      />
               ))
             ) : (
               <div className="py-20 text-center">
@@ -483,37 +493,106 @@ const Spec = ({ label, value }) => (
   </div>
 );
 
-const PlateRow = ({ plate, onRemove }) => (
-  <div className="group relative px-5 py-4 flex justify-between items-center bg-slate-900/20 hover:bg-slate-800/40 border-b border-white/5 transition-all duration-200">
-    
-    {/* Side Indicator */}
-    <div className="absolute left-0 top-0 bottom-0 w-1 bg-sky-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+// Added the missing state variables and functions as props here
+const PlateRow = ({ 
+  plate, 
+  onRemove, 
+  allPallets = [], 
+  activeCoord = { x: 0, y: 0 }, 
+  activeZ = 0, 
+  setActiveCoord, 
+  setInputValue 
+}) => {
+  
+  // Now these references will work correctly via props
+  const otherLocations = allPallets?.filter(p => 
+    p.plates.some(pl => pl.mark.toUpperCase() === plate.mark.toUpperCase()) && 
+    !(p.x === activeCoord.x && p.y === activeCoord.y && p.z === activeZ)
+  ) || [];
 
-    <div className="flex-1 min-w-0">
-      <div className="flex items-center gap-3 mb-2">
-        <h3 className="font-mono text-lg text-white font-bold tracking-tight uppercase">
-          {plate.mark}
-        </h3>
-        <div className="bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/20 text-[10px] font-black text-sky-400 uppercase">
-          REQ: {plate.totalRequired}
-        </div>
-      </div>
+  return (
+    <div className="group relative px-5 py-4 flex flex-col bg-slate-900/20 hover:bg-slate-800/40 border-b border-white/5 transition-all duration-200">
+      
+      {/* Side Indicator */}
+      <div className="absolute left-0 top-0 bottom-0 w-1 bg-sky-500 opacity-0 group-hover:opacity-100 transition-opacity" />
 
-      <div className="flex flex-wrap gap-2">
-        {/* Simplified Spec Inline */}
-        {[
-          ['L', plate.length],
-          ['W', plate.width],
-          ['T', plate.thickness],
-          ['H', plate.numberOfHoles || 0]
-        ].map(([label, val]) => (
-          <div key={label} className="flex gap-1.5 bg-white/5 px-2 py-1 rounded border border-white/5 text-[11px]">
-            <span className="text-slate-500 font-bold uppercase">{label}</span>
-            <span className="text-slate-200 font-mono">{val}</span>
+      <div className="flex justify-between items-start">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-3 mb-2">
+            <h3 className="font-mono text-lg text-white font-bold tracking-tight uppercase">
+              {plate.mark}
+            </h3>
+            {plate.totalRequired > 0 && (
+              <div className="bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/20 text-[10px] font-black text-sky-400 uppercase">
+                REQ: {plate.totalRequired}
+              </div>
+            )}
           </div>
-        ))}
+
+          <div className="flex flex-wrap gap-2">
+            {[
+              ['L', plate.length],
+              ['W', plate.width],
+              ['T', plate.thickness],
+              ['H', plate.numberOfHoles || 0]
+            ].map(([label, val]) => (
+              <div key={label} className="flex gap-1.5 bg-white/5 px-2 py-1 rounded border border-white/5 text-[11px]">
+                <span className="text-slate-500 font-bold uppercase">{label}</span>
+                <span className="text-slate-200 font-mono">{val}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Delete Action */}
+        {onRemove && (
+          <div className="ml-4 shrink-0">
+            <button
+              onDoubleClick={() => onRemove(plate.mark)}
+              className="p-3 rounded-lg bg-red-500/10 text-red-200 sm:opacity-0 group-hover:opacity-100 hover:bg-red-600 hover:text-white transition-all duration-200"
+            >
+              <Icons.Trash />
+            </button>
+          </div>
+        )}
       </div>
 
+      {/* --- CROSS REFERENCE SECTION --- */}
+      {otherLocations.length > 0 && (
+        <div className="mt-4 pt-3 border-t border-slate-800/50">
+          <div className="flex items-center gap-2 mb-2">
+            <Icons.Link />
+            <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest italic">Stocked Elsewhere</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {otherLocations.map((loc, idx) => (
+              <button
+                key={idx}
+                onClick={() => {
+                   // Ensure these are called safely
+                   if (setActiveCoord) setActiveCoord({ x: loc.x, y: loc.y });
+                   if (setInputValue) setInputValue(''); 
+                }}
+                className="flex items-center gap-2 bg-slate-950 border border-slate-800 hover:border-sky-500/50 pl-2 pr-1 py-1 rounded-md transition-all group/jump shadow-sm"
+              >
+                <div className="flex flex-row gap-2 items-start leading-none">
+                  <span className="text-[10px] font-mono text-emerald-400 font-bold">
+                    LOC: {loc.x}.{loc.y}.{loc.z}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase truncate max-w-[70px]"># 
+                    {loc.orderNumber || 'NO-ORD'}
+                  </span>
+                </div>
+                <div className="p-1.5 bg-slate-900 group-hover/jump:bg-sky-600 text-slate-500 group-hover/jump:text-white rounded transition-colors">
+                  <Icons.ArrowRight />
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Drawing Info */}
       {plate.drawings?.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
           {plate.drawings.map((d, i) => (
@@ -525,29 +604,5 @@ const PlateRow = ({ plate, onRemove }) => (
         </div>
       )}
     </div>
-
-    {/* Action Button - Forced Visibility Check */}
-    {onRemove && (
-      <div className="ml-4 shrink-0">
-        <button
-          onDoubleClick={() => onRemove(plate.mark)}
-          className="p-3 rounded-lg bg-red-500/10 text-red-200 sm:opacity-0 group-hover:opacity-100 hover:bg-red-900 hover:text-white transition-all duration-200"
-          aria-label="Delete"
-        >
-          <svg 
-            width="20" 
-            height="20" 
-            viewBox="0 0 24 24" 
-            fill="none" 
-            stroke="currentColor" 
-            strokeWidth="2.5" 
-            strokeLinecap="round" 
-            strokeLinejoin="round"
-          >
-            <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-          </svg>
-        </button>
-      </div>
-    )}
-  </div>
-);
+  );
+};
