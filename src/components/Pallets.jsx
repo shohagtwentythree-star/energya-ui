@@ -67,6 +67,19 @@ export default function Pallets() {
     }
   }, [inputValue]);
   
+    // Robust coordinate handler
+  const handleCoordChange = (axis, value) => {
+    if (value === "") {
+      setActiveCoord(prev => ({ ...prev, [axis]: "" }));
+      return;
+    }
+    const num = parseInt(value, 10);
+    if (!isNaN(num)) {
+      setActiveCoord(prev => ({ ...prev, [axis]: num }));
+    }
+  };
+
+  
   // 🔥 FIXED MATCHING FUNCTION
   // 🔥 MATCHING FUNCTION
 const matchPlatesWithDrawings = (pallets, drawings) => {
@@ -357,21 +370,38 @@ const updateOrderNumber = async () => {
                 </div>
 
 
- <div className="bg-slate-900/40 p-3 rounded-2xl border border-slate-800/50 backdrop-blur-sm">
-               
-                <div className="grid grid-cols-2 gap-4">
-                {["x", "y"].map((axis) => (
-                    <div key={axis} className="bg-slate-950 rounded-xl p-1.5 flex items-center border border-slate-800 shadow-inner">
-                        <button onClick={() => setActiveCoord(p => ({ ...p, [axis]: Math.max(0, p[axis] - 1) }))} className="w-10 h-10 rounded-lg bg-slate-900 text-slate-400 hover:bg-sky-600 hover:text-white transition-colors flex items-center justify-center font-black text-lg active:scale-95 transform"> − </button>
-                        <div className="flex-1 flex flex-col items-center">
-                            <span className="text-[8px] text-slate-500 font-bold uppercase">{axis.toUpperCase()} AXIS</span>
-                            <span className="text-xl font-mono font-bold text-sky-400 leading-none">{activeCoord[axis] || 0}</span>
-                        </div>
-                        <button onClick={() => setActiveCoord(p => ({ ...p, [axis]: (p[axis] || 0) + 1 }))} className="w-10 h-10 rounded-lg bg-slate-900 text-slate-400 hover:bg-emerald-500 hover:text-white transition-colors flex items-center justify-center font-black text-lg active:scale-95 transform"> + </button>
-                    </div>
-                ))}
-                </div>
-            </div>
+<div className="bg-slate-900/40 p-3 rounded-2xl border border-slate-800/50 backdrop-blur-sm">
+  <div className="grid grid-cols-2 gap-4">
+    {["x", "y"].map((axis) => (
+      <div key={axis} className="bg-slate-950 rounded-xl p-1.5 flex items-center border border-slate-800 shadow-inner group focus-within:border-sky-500/50 transition-all">
+        {/* Minus Button */}
+        <button 
+          onClick={() => handleCoordChange(axis, (Number(activeCoord[axis]) || 0) - 1)} 
+          className="w-10 h-10 rounded-lg bg-slate-900 text-slate-400 hover:bg-sky-600 hover:text-white transition-colors flex items-center justify-center font-black text-lg active:scale-95 transform"
+        > − </button>
+        
+        <div className="flex-1 flex flex-col items-center">
+          <span className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">{axis} Axis</span>
+          <input 
+            type="number"
+            inputMode="numeric"
+            value={activeCoord[axis]}
+            onFocus={(e) => e.target.select()} // Selects text on click
+            onChange={(e) => handleCoordChange(axis, e.target.value)}
+            className="w-full bg-transparent text-center text-xl font-mono font-bold text-sky-400 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          />
+        </div>
+
+        {/* Plus Button */}
+        <button 
+          onClick={() => handleCoordChange(axis, (Number(activeCoord[axis]) || 0) + 1)} 
+          className="w-10 h-10 rounded-lg bg-slate-900 text-slate-400 hover:bg-emerald-500 hover:text-white transition-colors flex items-center justify-center font-black text-lg active:scale-95 transform"
+        > + </button>
+      </div>
+    ))}
+  </div>
+</div>
+
 
 {/* COMMAND BAR */}
 <div className="sticky top-4 z-40">

@@ -45,7 +45,6 @@ const [activeTab, setActiveTab] = useState(() => {
   useEffect(() => { localStorage.setItem("bridge_pallet_sort_pref", sortType); }, [sortType]);
   
   useEffect(() => { fetchAll(); }, []);
-
   // --- API FETCHING ---
   const fetchAll = async () => {
     setIsLoading(true);
@@ -169,6 +168,49 @@ const handleSearch = (e) => {
     
     return { totalRequired, totalPut, inCart, netRemaining, matches };
   };
+  
+  
+  
+  const [isModalOpen, setIsModalOpen] = useState(false);
+const [selectedPlate, setSelectedPlate] = useState(null);
+const [customQty, setCustomQty] = useState(1);
+
+useEffect(() => {
+  const handleKeyDown = (e) => {
+    if (e.key === "Escape") setIsModalOpen(false);
+    if (e.key === "Enter" && isModalOpen) {
+      addToCart(selectedPlate, customQty);
+      setIsModalOpen(false);
+    }
+  };
+
+  if (isModalOpen) {
+    document.body.style.overflow = 'hidden';
+    window.addEventListener("keydown", handleKeyDown);
+  } else {
+    document.body.style.overflow = 'unset';
+  }
+  return () => {
+    document.body.style.overflow = 'unset';
+    window.removeEventListener("keydown", handleKeyDown);
+  };
+}, [isModalOpen, customQty, selectedPlate]);
+
+
+  
+  const handleCoordChange = (axis, value) => {
+  // Allow empty string so user can delete the number to type a new one
+  if (value === "") {
+    setActiveCoord(prev => ({ ...prev, [axis]: "" }));
+    return;
+  }
+  
+  const num = parseInt(value, 10);
+  if (!isNaN(num)) {
+    setActiveCoord(prev => ({ ...prev, [axis]: num }));
+  }
+};
+
 
   // --- ACTIONS ---
   const addToCart = async (plate, qty) => {
@@ -324,12 +366,17 @@ const handleSearch = (e) => {
               ) : <span className="flex items-center gap-1"><Icons.Check/> Fulfilled</span>}
           </button>
           
-          <button onClick={() => {
-              const val = prompt("Manual Quantity:", netRemaining || 0);
-              if(val) addToCart(p, Number(val));
-          }} className="w-12 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold text-lg border border-slate-700 text-slate-400 hover:text-white transition-colors flex items-center justify-center">
-            ±
-          </button>
+<button 
+  onClick={() => {
+    setSelectedPlate(p);
+    setCustomQty(0); // Default to demand
+    setIsModalOpen(true);
+  }} 
+  className="w-12 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold text-lg border border-slate-700 text-slate-400 hover:text-white transition-colors flex items-center justify-center"
+>
+  ±
+</button>
+
         </div>
       </div>
     );
@@ -396,15 +443,15 @@ const getTabCount = (tabId) => {
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-full bg-slate-900 border border-slate-800 text-slate-200 text-sm rounded-xl pl-10 pr-10 py-3 focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500 placeholder-slate-600 transition-all"
         />
-        {searchTerm && (
-          <button 
-            type="button"
-            onClick={() => setSearchTerm("")}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white text-xs font-bold"
-          >
-            ✕
-          </button>
-        )}
+{searchTerm && (
+  <button 
+    type="button"
+    onClick={() => setSearchTerm("")}
+    className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800 transition"
+  >
+    ✕
+  </button>
+)}
       </form>
 
       <div className="flex bg-slate-900 rounded-xl border border-slate-800 p-1 shrink-0">
@@ -499,20 +546,41 @@ const getTabCount = (tabId) => {
 
 
     {/* 2. COORD NAVIGATION DASHBOARD (RESTORING YOUR ORIGINAL UI) */}
-    <div className="bg-slate-900/40 p-3 rounded-2xl border border-slate-800/50 backdrop-blur-sm">
-        <div className="grid grid-cols-2 gap-4">
-        {["x", "y"].map((axis) => (
-            <div key={axis} className="bg-slate-950 rounded-xl p-1.5 flex items-center border border-slate-800 shadow-inner">
-                <button onClick={() => setActiveCoord(p => ({ ...p, [axis]: Math.max(0, p[axis] - 1) }))} className="w-10 h-10 rounded-lg bg-slate-900 text-slate-400 hover:bg-sky-600 hover:text-white transition-colors flex items-center justify-center font-black text-lg active:scale-95 transform"> − </button>
-                <div className="flex-1 flex flex-col items-center">
-                    <span className="text-[8px] text-slate-500 font-bold uppercase">{axis.toUpperCase()} AXIS</span>
-                    <span className="text-xl font-mono font-bold text-sky-400 leading-none">{activeCoord[axis] || 0}</span>
-                </div>
-                <button onClick={() => setActiveCoord(p => ({ ...p, [axis]: (p[axis] || 0) + 1 }))} className="w-10 h-10 rounded-lg bg-slate-900 text-slate-400 hover:bg-emerald-500 hover:text-white transition-colors flex items-center justify-center font-black text-lg active:scale-95 transform"> + </button>
-            </div>
-        ))}
+  {/* COORD NAVIGATION DASHBOARD */}
+<div className="bg-slate-900/40 p-3 rounded-2xl border border-slate-800/50 backdrop-blur-sm">
+  <div className="grid grid-cols-2 gap-4">
+    {["x", "y"].map((axis) => (
+      <div key={axis} className="bg-slate-950 rounded-xl p-1.5 flex items-center border border-slate-800 shadow-inner group focus-within:border-sky-500/50 transition-all">
+        {/* Minus Button */}
+        <button 
+          type="button"
+          onClick={() => handleCoordChange(axis, (Number(activeCoord[axis]) || 0) - 1)} 
+          className="w-10 h-10 rounded-lg bg-slate-900 text-slate-400 hover:bg-sky-600 hover:text-white transition-colors flex items-center justify-center font-black text-lg active:scale-95"
+        > − </button>
+        
+        <div className="flex-1 flex flex-col items-center">
+          <span className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">{axis} Axis</span>
+          <input 
+            type="number"
+            inputMode="numeric"
+            value={activeCoord[axis]}
+            onFocus={(e) => e.target.select()} // Selects text on click for easy overwriting
+            onChange={(e) => handleCoordChange(axis, e.target.value)}
+            className="w-full bg-transparent text-center text-xl font-mono font-bold text-sky-400 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          />
         </div>
-    </div>
+
+        {/* Plus Button */}
+        <button 
+          type="button"
+          onClick={() => handleCoordChange(axis, (Number(activeCoord[axis]) || 0) + 1)} 
+          className="w-10 h-10 rounded-lg bg-slate-900 text-slate-400 hover:bg-emerald-500 hover:text-white transition-colors flex items-center justify-center font-black text-lg active:scale-95"
+        > + </button>
+      </div>
+    ))}
+  </div>
+</div>
+
 
     {/* 3. LIST RENDERING (WITH FILTER LOGIC) */}
     {activePlates.length === 0 ? (
@@ -788,6 +856,166 @@ const getTabCount = (tabId) => {
 
 
       </div>
+      
+{isModalOpen && selectedPlate && (
+  <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+    
+    {/* Container */}
+    <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl flex flex-col overflow-hidden">
+      
+      {/* Header */}
+      <div className="px-6 py-5 border-b border-slate-800 flex justify-between items-center">
+        <div>
+          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+            Manual Dispatch
+          </p>
+          <h2 className="text-3xl font-mono font-bold text-white">
+            {selectedPlate.mark}
+          </h2>
+          <p className="text-xs text-slate-500 mt-1">
+            Loc: {activeCoord.x}.{activeCoord.y}.{activeCoord.z}
+          </p>
+        </div>
+
+        <button
+          onClick={() => setIsModalOpen(false)}
+          className="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white transition"
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* Body */}
+      <div className="px-6 py-8 space-y-6">
+
+        {/* Quantity Selector (UNCHANGED) */}
+        <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-2xl p-3">
+          
+          <button
+            onClick={() =>
+              setCustomQty((prev) => Math.max(1, prev - 1))
+            }
+            className="w-12 h-12 rounded-xl bg-slate-800 text-lg font-bold text-sky-400 active:scale-95 transition"
+          >
+            −
+          </button>
+
+          <input
+            type="number"
+            inputMode="numeric"
+            min={1}
+           
+            value={customQty}
+            onChange={(e) => {
+              const value = Number(e.target.value);
+              if (isNaN(value)) return;
+              if (value < 1) return setCustomQty(1);
+             
+              setCustomQty(value);
+            }}
+            onFocus={(e) => e.target.select()}
+            className="w-24 bg-transparent text-center text-4xl font-mono font-bold text-white focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            autoFocus
+          />
+
+          <button
+            onClick={() =>
+              setCustomQty((prev) =>
+                Math.min(prev + 1)
+              )
+            }
+            className="w-12 h-12 rounded-xl bg-slate-800 text-lg font-bold text-emerald-400 active:scale-95 transition"
+          >
+            +
+          </button>
+        </div>
+
+        {/* Presets (UPDATED TO INCREMENTAL) */}
+        <div className="flex flex-wrap gap-2 justify-center">
+
+
+
+          {/* -5 */}
+          <button
+            onClick={() =>
+              setCustomQty((prev) => Math.max(1, prev - 5))
+            }
+            className="px-4 py-2 text-xs font-semibold rounded-lg border bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500 transition"
+          >
+            -5
+          </button>
+
+          {/* +5 */}
+          <button
+            onClick={() =>
+              setCustomQty((prev) =>
+                Math.min(prev + 5)
+              )
+            }
+            className="px-4 py-2 text-xs font-semibold rounded-lg border bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500 transition"
+          >
+            +5
+          </button>
+          
+                    {/* -10 */}
+          <button
+            onClick={() =>
+              setCustomQty((prev) => Math.max(1, prev - 10))
+            }
+            className="px-4 py-2 text-xs font-semibold rounded-lg border bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500 transition"
+          >
+            -10
+          </button>
+
+          {/* +10 */}
+          <button
+            onClick={() =>
+              setCustomQty((prev) =>
+                Math.min(prev + 10)
+              )
+            }
+            className="px-4 py-2 text-xs font-semibold rounded-lg border bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500 transition"
+          >
+            +10
+          </button>
+
+          {/* ALL */}
+          <button
+            onClick={() =>
+              setCustomQty(selectedPlate.stats.netRemaining)
+            }
+            className="px-4 py-2 text-xs font-semibold rounded-lg border bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500 transition"
+          >
+            ALL ({selectedPlate.stats.netRemaining})
+          </button>
+        </div>
+
+        {/* Remaining Info */}
+        <div className="text-center text-xs text-slate-500">
+          Available: {selectedPlate.stats.netRemaining}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="p-6 border-t border-slate-800 bg-slate-900">
+        <button
+         
+          onClick={() => {
+            if (
+              customQty >= 1
+            ) {
+              addToCart(selectedPlate, customQty);
+              setIsModalOpen(false);
+            }
+          }}
+          className="w-full py-3 rounded-xl bg-sky-600 hover:bg-sky-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold transition active:scale-95"
+        >
+          Confirm & Add
+        </button>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 }

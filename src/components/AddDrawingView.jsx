@@ -103,7 +103,6 @@ export default function AddDrawingView({ onCancel, onSuccess }) {
   
   <div className="relative">
     <select 
-      required 
       value={newDwg.deliverTo || ""} 
       className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white font-bold outline-none focus:ring-2 focus:ring-sky-500/50 appearance-none cursor-pointer"
       onChange={e => setNewDwg({...newDwg, deliverTo: e.target.value})}
@@ -128,7 +127,7 @@ export default function AddDrawingView({ onCancel, onSuccess }) {
 
             <div className="col-span-2 md:col-span-1">
               <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Delivery Date</label>
-              <input required type="date" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white font-bold outline-none focus:ring-2 focus:ring-sky-500/50" 
+              <input type="date" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white font-bold outline-none focus:ring-2 focus:ring-sky-500/50" 
                 onChange={e => setNewDwg({...newDwg, deliveryDate: e.target.value})} />
             </div>
           </div>
