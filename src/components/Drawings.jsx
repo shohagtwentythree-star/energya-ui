@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import DetailDrawingView from './DetailDrawingView';
-import AddDrawingView from './AddDrawingView';
+import { useNavigate } from "react-router-dom";
 
 const API_URL = 'http://localhost:3000/drawings';
 
@@ -12,10 +11,25 @@ export default function Drawings() {
   const [drawings, setDrawings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [view, setView] = useState('list'); 
-  const [selectedDwg, setSelectedDwg] = useState(null);
   const [activeStatus, setActiveStatus] = useState(STATUS_WORKFLOW[0]);
   const [expandedId, setExpandedId] = useState(null);
+
+const navigate = useNavigate();
+
+  // --- TOOLTIP / NOTIFICATION SYSTEM ---
+  const [notification, setNotification] = useState(null);
+
+  useEffect(() => {
+    if (notification) {
+      const timer = setTimeout(() => setNotification(null), 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [notification]);
+
+  const showToast = (message, type = 'success') => {
+    setNotification({ message, type });
+  };
+  // -------------------------------------
 
   useEffect(() => {
     fetchDrawings();
@@ -32,11 +46,13 @@ export default function Drawings() {
         }));
         setDrawings(cleanedData);
       }
-    } catch (error) { console.error("Fetch error:", error); }
+    } catch (error) { 
+      showToast("Critical: Failed to sync with database", "error");
+      console.error("Fetch error:", error); 
+    }
     finally { setLoading(false); }
   };
 
-  // Helper to find the first available serial number (gap-filling)
   const getNextAvailableSN = () => {
     const waitingSns = drawings
       .filter(d => d.status === 'waiting' && d.serialNumber)
@@ -57,14 +73,13 @@ export default function Drawings() {
     const newIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
 
     if (currentIndex === -1 || newIndex < 0 || newIndex >= STATUS_WORKFLOW.length) {
-      console.warn("Invalid transition");
+      showToast("Invalid status transition", "error");
       return;
     }
 
     const newStatus = STATUS_WORKFLOW[newIndex];
     let assignedSN = dwg.serialNumber;
 
-    // Logic for assigning Serial Number when moving to "waiting"
     if (newStatus === 'waiting') {
       if (manualSN) {
         assignedSN = manualSN;
@@ -72,7 +87,6 @@ export default function Drawings() {
         assignedSN = getNextAvailableSN();
       }
     } else if (newStatus === 'new') {
-        // Clear SN if moving back to new
         assignedSN = null;
     }
 
@@ -84,14 +98,16 @@ export default function Drawings() {
       ));
 
       const response = await fetch(`${API_URL}/${dwg._id}`, {
-        method: 'PATCH',
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus, serialNumber: assignedSN })
       });
 
       if (!response.ok) throw new Error("Server failed");
+      
+      showToast(`${dwg.drawingNumber} updated to ${newStatus.toUpperCase()}`);
     } catch (error) {
-      console.error("Update failed, reverting state:", error);
+      showToast("Update failed - Reverting local state", "error");
       setDrawings(oldDrawings);
       fetchDrawings();
     }
@@ -99,23 +115,27 @@ export default function Drawings() {
 
   const handleManualSNUpdate = async (dwg, inputVal) => {
     const newSN = parseInt(inputVal);
-    if (isNaN(newSN) || newSN <= 0) return;
+    if (isNaN(newSN) || newSN <= 0) {
+        showToast("Invalid Serial Number format", "error");
+        return;
+    }
 
-    // Check if SN is already taken by another waiting drawing
     const isTaken = drawings.some(d => d.status === 'waiting' && d.serialNumber === newSN && d._id !== dwg._id);
     if (isTaken) {
-      alert(`Serial Number ${newSN} is already assigned!`);
+      showToast(`Serial Number ${newSN} is already assigned!`, "error");
       return;
     }
 
     try {
       setDrawings(prev => prev.map(d => d._id === dwg._id ? { ...d, serialNumber: newSN } : d));
-      await fetch(`${API_URL}/${dwg._id}`, {
-        method: 'PATCH',
+      const response = await fetch(`${API_URL}/${dwg._id}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ serialNumber: newSN })
       });
+      if (response.ok) showToast(`Serial Number updated to #${newSN}`);
     } catch (error) {
+      showToast("Failed to update Serial Number", "error");
       fetchDrawings();
     }
   };
@@ -143,7 +163,9 @@ export default function Drawings() {
   };
 
   const handleRowClick = (dwg) => setExpandedId(expandedId === dwg._id ? null : dwg._id);
-  const handleRowDoubleClick = (dwg) => { setSelectedDwg(dwg); setView('detail'); };
+  const handleRowDoubleClick = (dwg) => {
+  navigate(`/drawings/${dwg._id}`);
+};
 
   if (loading) return (
     <div className="flex flex-col items-center justify-center min-h-[400px]">
@@ -152,12 +174,21 @@ export default function Drawings() {
     </div>
   );
 
-  if (view === 'add') return <AddDrawingView onCancel={() => setView('list')} onSuccess={() => { setView('list'); fetchDrawings(); }} />;
-  if (view === 'detail') return <DetailDrawingView dwg={selectedDwg} onBack={() => setView('list')} />;
-
   return (
-    <div className="w-full p-4 space-y-6 animate-in fade-in duration-500">
+    <div className="w-full p-4 space-y-6     relative">
       
+      {/* TOOLTIP WINDOW */}
+      {notification && (
+        <div className={`fixed top-10 left-1/2 -translate-x-1/2 z-[999] flex items-center gap-4 px-6 py-4 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] border   slide-in-from-top-10 duration-500 ${
+          notification.type === 'error' 
+          ? 'bg-red-950/90 border-red-500 text-red-100' 
+          : 'bg-slate-900/90 border-sky-500 text-sky-100'
+        }`}>
+          <div className={`w-3 h-3 rounded-full animate-pulse ${notification.type === 'error' ? 'bg-red-500' : 'bg-sky-500'}`} />
+          <span className="text-[11px] font-black uppercase tracking-[0.2em]">{notification.message}</span>
+        </div>
+      )}
+
       {/* HEADER */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 border-b border-slate-800 pb-6">
         <div>
@@ -177,7 +208,7 @@ export default function Drawings() {
             />
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">🔍</span>
           </div>
-          <button onClick={() => setView('add')} className="bg-sky-600 hover:bg-sky-500 text-white px-6 py-3 rounded-xl font-black uppercase text-xs tracking-widest active:scale-95 transition-all">
+           <button onClick={() => navigate('/drawings/add')} className="bg-sky-600 hover:bg-sky-500 text-white px-6 py-3 rounded-xl font-black uppercase text-xs tracking-widest active:scale-95 transition-all">
             + New
           </button>
         </div>
@@ -219,8 +250,8 @@ export default function Drawings() {
                   <div>
                     <div className="flex items-center gap-2">
                        <span className="text-white font-black text-xl block tracking-tighter">{dwg.drawingNumber}</span>
-                       {activeStatus === 'waiting' && (
-                         <span className="bg-sky-500 text-white text-[10px] px-2 py-0.5 rounded font-mono font-black">SN: {dwg.serialNumber}</span>
+                       {(dwg.serialNumber || activeStatus === 'waiting') && (
+                         <span className="bg-sky-500 text-white text-[10px] px-2 py-0.5 rounded font-mono font-black">SN: {dwg.serialNumber || '?'}</span>
                        )}
                     </div>
                     <span className="text-[11px] text-slate-500 font-bold uppercase tracking-widest">{dwg.deliverTo} • x{dwg.dwgQty} Sets</span>
@@ -228,21 +259,21 @@ export default function Drawings() {
                   </div>
                   <div className="text-sky-400 font-mono font-black">{found}/{total}</div>
                 </div>
+                {/* Overall Progress Bar */}
                 <div className="space-y-1.5 w-full">
                   <div className="flex justify-between items-end px-0.5">
                     <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Overall Progress</span>
-                    <span className={`text-xs font-mono font-black ${found >= total ? 'text-emerald-400' : 'text-sky-400'}`}>{Math.round((found / total) * 100)}%</span>
+                    <span className={`text-xs font-mono font-black ${found >= total ? 'text-emerald-400' : 'text-sky-400'}`}>{total > 0 ? Math.round((found / total) * 100) : 0}%</span>
                   </div>
                   <div className="relative w-full bg-slate-900 rounded-full h-2.5 p-0.5 border border-slate-800 shadow-inner">
-                    <div className={`h-full rounded-full transition-all duration-700 ease-out relative ${found >= total ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'bg-sky-500 shadow-[0_0_10px_rgba(14,165,233,0.3)]'}`} style={{ width: `${(found / total) * 100}%` }}>
-                      <div className="absolute inset-0 bg-white/10 w-full h-0.5 rounded-full"></div>
+                    <div className={`h-full rounded-full transition-all duration-700 ease-out relative ${found >= total ? 'bg-emerald-500' : 'bg-sky-500'}`} style={{ width: `${total > 0 ? (found / total) * 100 : 0}%` }}>
                     </div>
                   </div>
                 </div>
               </div>
 
               {isExpanded && (
-                <div className="w-full border-t border-slate-700 bg-slate-950/40 animate-in slide-in-from-top-1 duration-200">
+                <div className="w-full border-t border-slate-700 bg-slate-950/40   slide-in-from-top-1 duration-200">
                   <div className="w-full flex flex-col divide-y divide-slate-800/40">
                     {dwg.plates?.map((p, i) => {
                       const multiplier = Number(dwg.dwgQty) || 1;
@@ -254,7 +285,6 @@ export default function Drawings() {
                         <div key={i} className="w-full flex items-center gap-3 py-3 px-5">
                           <div className="w-20 shrink-0"><span className="text-sky-400 font-black text-[11px] uppercase truncate block">{p.mark}</span></div>
                           <div className="flex-1 flex flex-col gap-1">
-                            <div className="flex justify-between items-center"><span style={{ color: dynamicColor }} className="text-[9px] font-mono font-black">{Math.round(percentage)}%</span></div>
                             <div className="w-full bg-slate-950 rounded-full h-1 overflow-hidden border border-slate-800/50">
                               <div className="h-full transition-all duration-700" style={{ width: `${percentage}%`, backgroundColor: dynamicColor }} />
                             </div>

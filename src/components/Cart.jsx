@@ -51,6 +51,12 @@ const [activeTab, setActiveTab] = useState(() => {
     try { await Promise.all([fetchPallets(), fetchDrawings(), fetchCart()]); } 
     finally { setIsLoading(false); }
   };
+  
+  const isPlateInAnyPallet = (mark) => {
+  return pallets.some(pal =>
+    pal.plates?.some(pl => pl.mark === mark)
+  );
+};
 
   const fetchPallets = async () => {
     try {
@@ -100,9 +106,8 @@ const [activeTab, setActiveTab] = useState(() => {
         const matchedPlate = d.plates.find((p) => p.mark === itemMark);
         const multiplier = Number(d.dwgQty) || 1;
         return {
+          ...d,
           drawingId: d._id,
-          drawingNumber: d.drawingNumber,
-          status: d.status, 
           requiredQty: (Number(matchedPlate?.qty) || 0) * multiplier,
           foundCount: Number(matchedPlate?.foundCount) || 0, 
         };
@@ -695,13 +700,14 @@ const getTabCount = (tabId) => {
                 const needed = Math.max(0, m.requiredQty - m.foundCount);
                 const canGive = Math.min(c.quantity, needed);
                 const isDone = needed === 0;
+               
 
                 return (
                   <div key={mi} className={`flex items-center justify-between p-3 rounded-xl transition-all ${isDone ? 'opacity-30 grayscale' : 'hover:bg-slate-800/40'}`}>
                     
                     {/* Drawing Number & Progress mini */}
                     <div className="flex flex-col gap-1">
-                      <span className="text-xs font-bold text-slate-300">{m.drawingNumber}</span>
+                      <span className="text-xs font-bold text-slate-300"># {m.serialNumber || "#"} | {m.drawingNumber}</span>
                       <div className="flex items-center gap-2">
                          <div className="w-16 bg-slate-800 h-1 rounded-full overflow-hidden">
                             <div 
@@ -827,13 +833,18 @@ const getTabCount = (tabId) => {
       <Icons.Cart className="w-3 h-3" /> Put {canPut}
     </button>
   ) : needed > 0 ? (
-    /* 👇 NEW SEARCH BUTTON */
-    <button 
-      onClick={() => jumpToMark(plate.mark)}
-      className="w-auto bg-slate-800 hover:bg-sky-600 text-slate-400 hover:text-white p-2 rounded-lg text-[10px] font-black uppercase transition-all flex items-center justify-center gap-2 border border-slate-700 hover:border-sky-400"
-    >
-      <Icons.Search />
-    </button>
+  <button 
+    onClick={() => jumpToMark(plate.mark)}
+    className={`w-auto p-2 rounded-lg text-[10px] font-black uppercase transition-all flex items-center justify-center gap-2 border
+      ${
+        isPlateInAnyPallet(plate.mark)
+          ? "bg-green-600/20 text-green-400 border-green-500/40 hover:bg-green-600 hover:text-white"
+          : "bg-slate-800 text-slate-400 border-slate-700 hover:bg-sky-600 hover:text-white hover:border-sky-400"
+      }
+    `}
+  >
+    <Icons.Search />
+  </button>
   ) : (
     <div className="bg-emerald-500/10 p-1.5 rounded-full border border-emerald-500/20">
       <Icons.Check className="text-emerald-500 w-3.5 h-3.5" />

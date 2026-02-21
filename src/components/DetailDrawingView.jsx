@@ -1,23 +1,54 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useParams, useNavigate } from "react-router-dom";
 
 // Unique key for localStorage
 const STORAGE_KEY = 'detail_drawing_view_plates_sort_by';
 
-export default function DetailDrawingView({ dwg, onBack }) {
-  const dwgMultiplier = Number(dwg.dwgQty) || 1;
+export default function DetailDrawingView() {
+
+  const { id } = useParams();
+  const navigate = useNavigate();
+
+  // =========================
+  // STATE
+  // =========================
+  const [dwg, setDwg] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [plateLocations, setPlateLocations] = useState({});
   const [isZoomed, setIsZoomed] = useState(false);
-  
-  // 1. Persisted Sort State
+
   const [sortBy, setSortBy] = useState(() => {
     return localStorage.getItem(STORAGE_KEY) || 'default';
   });
 
+  // =========================
+  // EFFECTS
+  // =========================
+
+  // Fetch drawing
+  useEffect(() => {
+    const fetchDrawing = async () => {
+      try {
+        const res = await fetch(`http://localhost:3000/drawings/${id}`);
+        const data = await res.json();
+        if (data.status === "success") {
+          setDwg(data.data);
+        }
+      } catch (err) {
+        console.error("Failed fetching drawing:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDrawing();
+  }, [id]);
+
+  // Persist sort setting
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, sortBy);
   }, [sortBy]);
 
-  // 2. Fetch Live Plate Locations from Pallets
+  // Fetch pallet locations
   useEffect(() => {
     const fetchPlateLocations = async () => {
       try {
@@ -34,17 +65,22 @@ export default function DetailDrawingView({ dwg, onBack }) {
           });
           setPlateLocations(locMap);
         }
-      } catch (err) { 
-        console.error("Failed fetching plate locations:", err); 
+      } catch (err) {
+        console.error("Failed fetching plate locations:", err);
       }
     };
     fetchPlateLocations();
-  }, [dwg]);
+  }, []);
 
-  // 3. Dynamic Calculation for "Real" Batch Stats
+  // =========================
+  // MEMOS
+  // =========================
+
+  const dwgMultiplier = Number(dwg?.dwgQty) || 1;
+
   const batchStats = useMemo(() => {
-    if (!dwg.plates) return { found: 0, total: 0, percent: 0 };
-    
+    if (!dwg?.plates) return { found: 0, total: 0, percent: 0 };
+
     const totals = dwg.plates.reduce((acc, plate) => {
       acc.found += (plate.foundCount || 0);
       acc.total += (plate.qty * dwgMultiplier);
@@ -53,11 +89,10 @@ export default function DetailDrawingView({ dwg, onBack }) {
 
     totals.percent = totals.total > 0 ? (totals.found / totals.total) * 100 : 0;
     return totals;
-  }, [dwg.plates, dwgMultiplier]);
+  }, [dwg?.plates, dwgMultiplier]);
 
-  // 4. Logic to handle sorting
   const sortedPlates = useMemo(() => {
-    if (!dwg.plates) return [];
+    if (!dwg?.plates) return [];
     let list = [...dwg.plates];
 
     switch (sortBy) {
@@ -70,7 +105,37 @@ export default function DetailDrawingView({ dwg, onBack }) {
       default:
         return list;
     }
-  }, [dwg.plates, sortBy]);
+  }, [dwg?.plates, sortBy]);
+
+  // =========================
+  // EARLY RETURNS (NOW SAFE)
+  // =========================
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen text-slate-400">
+        Loading drawing...
+      </div>
+    );
+  }
+
+  if (!dwg) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen text-red-400">
+        Drawing not found
+        <button
+          onClick={() => navigate('/drawings')}
+          className="mt-4 px-4 py-2 bg-slate-800 rounded"
+        >
+          Back
+        </button>
+      </div>
+    );
+  }
+
+  // =========================
+  // UTILITIES
+  // =========================
 
   const getDynamicStatusStyle = (found, total) => {
     const ratio = total > 0 ? Math.min(found / total, 1) : 0;
@@ -97,6 +162,11 @@ export default function DetailDrawingView({ dwg, onBack }) {
     </svg>
   );
 
+  // =========================
+  // JSX (UNCHANGED)
+  // =========================
+
+
   return (
     <div className="w-full min-h-screen bg-slate-900 p-3 md:p-6 text-slate-200">
       <div className="max-w-[1400px] mx-auto">
@@ -106,7 +176,7 @@ export default function DetailDrawingView({ dwg, onBack }) {
           <h2 className="text-3xl font-black text-white italic tracking-tighter uppercase">
             {dwg.drawingNumber} <span className="text-sky-500 not-italic ml-2 text-2xl">x{dwgMultiplier}</span>
           </h2>
-          <button onClick={onBack} className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-6 py-2 rounded-lg font-bold transition uppercase tracking-widest border border-slate-700">
+          <button onClick={() => navigate('/drawings')} className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-6 py-2 rounded-lg font-bold transition uppercase tracking-widest border border-slate-700">
             Back to List
           </button>
         </div>
