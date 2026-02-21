@@ -447,6 +447,7 @@ const getTabCount = (tabId) => {
   activeCoord={activeCoord}
   setActiveCoord={setActiveCoord}
   handleCoordChange={handleCoordChange}
+  coordKey={coordKey}
   getCoordKey={getCoordKey}
   getGlobalStats={getGlobalStats}
   renderPlateCard={renderPlateCard}

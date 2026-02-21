@@ -214,10 +214,10 @@ const parsePlateData = (input) => {
 
   return {
     mark: mark.trim(),
-    length: Number(extract('L', 1200)),
-    width: Number(extract('W', 800)),
-    thickness: Number(extract('T', 12)),
-    numberOfHoles: Number(extract('H', 4))
+    length: Number(extract('L', 0)),
+    width: Number(extract('W', 0)),
+    thickness: Number(extract('T', 0)),
+    numberOfHoles: Number(extract('H', 0))
   };
 };
 
@@ -487,6 +487,7 @@ const updateOrderNumber = async () => {
               filteredActivePlates.map((plate, i) => (
       <PlateRow 
         key={i} 
+        index={i}
         plate={plate} 
         onRemove={removePlate} 
         // 👇 Add these new props here
@@ -543,8 +544,8 @@ const updateOrderNumber = async () => {
 
                 </div>
 
-                {result.matches.map((plate, pi) => (
-                  <PlateRow key={pi} plate={plate} />
+                {result.matches.map((plate, i) => (
+                  <PlateRow key={i} plate={plate} />
                 ))}
               </div>
             ))}
@@ -566,6 +567,7 @@ const Spec = ({ label, value }) => (
 
 // Added the missing state variables and functions as props here
 const PlateRow = ({ 
+  index,
   plate, 
   onRemove, 
   allPallets = [], 
@@ -576,6 +578,8 @@ const PlateRow = ({
   setSearchParams
 }) => {
   
+  const isEven = index % 2 === 0;
+  
   // Now these references will work correctly via props
   const otherLocations = allPallets?.filter(p => 
     p.plates.some(pl => pl.mark.toUpperCase() === plate.mark.toUpperCase()) && 
@@ -583,6 +587,7 @@ const PlateRow = ({
   ) || [];
 
   return (
+        <div className={`${isEven ? 'bg-green-700/20' : 'bg-transparent'}`}>
     <div className="group relative px-5 py-4 flex flex-col bg-slate-900/20 hover:bg-slate-800/40 border-b border-white/5 transition-all duration-200">
       
       {/* Side Indicator */}
@@ -602,18 +607,21 @@ const PlateRow = ({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {[
-              ['L', plate.length],
-              ['W', plate.width],
-              ['T', plate.thickness],
-              ['H', plate.numberOfHoles || 0]
-            ].map(([label, val]) => (
-              <div key={label} className="flex gap-1.5 bg-white/5 px-2 py-1 rounded border border-white/5 text-[11px]">
-                <span className="text-slate-500 font-bold uppercase">{label}</span>
-                <span className="text-slate-200 font-mono">{val}</span>
-              </div>
-            ))}
-          </div>
+  {[
+    ['L', plate.length],
+    ['W', plate.width],
+    ['T', plate.thickness],
+    ['H', plate.numberOfHoles]
+  ]
+    .filter(([_, val]) => val !== undefined && val > 0 && val !== null && val !== '') // Keeps 0, hides missing
+    .map(([label, val]) => (
+      <div key={label} className="flex gap-1.5 bg-white/5 px-2 py-1 rounded border border-white/5 text-[11px]">
+        <span className="text-slate-500 font-bold uppercase">{label}</span>
+        <span className="text-slate-200 font-mono">{val}</span>
+      </div>
+    ))}
+</div>
+
         </div>
 
         {/* Delete Action */}
@@ -688,6 +696,6 @@ const PlateRow = ({
     ))}
   </div>
 )}
-    </div>
+    </div></div>
   );
 };
