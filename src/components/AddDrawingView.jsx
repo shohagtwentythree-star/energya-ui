@@ -310,96 +310,99 @@ export default function AddDrawingView() {
           <div className="space-y-5">
             <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider">Plate Components</h3>
 
-            {newDwg.plates.map((plate, idx) => (
-              <div
-                key={idx}
-                className="grid grid-cols-12 gap-4 bg-slate-800/40 p-5 rounded-xl border border-slate-700 hover:border-slate-600 transition-colors items-end"
-              >
-                <div className="col-span-12 md:col-span-3">
-                  <label className="block text-xs text-slate-500 font-bold uppercase mb-1.5">Mark</label>
-                  <input
-                    required
-                    value={plate.mark}
-                    onChange={e => handlePlateChange(idx, 'mark', e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-sky-500"
-                  />
-                </div>
+{newDwg.plates.map((plate, idx) => (
+  <div
+    key={idx}
+    className="grid grid-cols-12 gap-4 p-5 rounded-xl border border-slate-700/50 hover:border-slate-600 transition-all items-end
+               odd:bg-slate-800/20 even:bg-slate-800/40 mb-3"
+  >
+    {/* Mark */}
+    <div className="col-span-12 md:col-span-3">
+      <label className="block text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1.5 ml-1">Mark</label>
+      <input
+        required
+        value={plate.mark}
+        onChange={e => handlePlateChange(idx, 'mark', e.target.value)}
+        className="w-full bg-slate-950 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-sky-500"
+      />
+    </div>
 
-                <div className="col-span-12 md:col-span-4">
-                  <label className="block text-xs text-slate-500 font-bold uppercase mb-1.5">L × W × T (mm)</label>
-                  <div className="grid grid-cols-3 gap-3">
-                    <input
-                      type="number"
-                      min="0"
-                      placeholder="L"
-                      value={plate.l || ''}
-                      onChange={e => handlePlateChange(idx, 'l', e.target.value)}
-                      className="bg-slate-900 border border-slate-600 rounded-lg px-3 py-2.5 text-center text-white focus:outline-none focus:border-sky-500"
-                    />
-                    <input
-                      type="number"
-                      min="0"
-                      placeholder="W"
-                      value={plate.w || ''}
-                      onChange={e => handlePlateChange(idx, 'w', e.target.value)}
-                      className="bg-slate-900 border border-slate-600 rounded-lg px-3 py-2.5 text-center text-white focus:outline-none focus:border-sky-500"
-                    />
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.1"
-                      placeholder="T"
-                      value={plate.t || ''}
-                      onChange={e => handlePlateChange(idx, 't', e.target.value)}
-                      className="bg-slate-800 border border-sky-600/40 rounded-lg px-3 py-2.5 text-center text-sky-300 font-medium focus:outline-none focus:border-sky-500"
-                    />
-                  </div>
-                </div>
+    {/* Dimensions */}
+    <div className="col-span-12 md:col-span-4">
+      <label className="block text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1.5 ml-1">L × W × T</label>
+      <div className="grid grid-cols-3 gap-2">
+        <input type="number" placeholder="L" value={plate.l || ''} onChange={e => handlePlateChange(idx, 'l', e.target.value)}
+          className="bg-slate-950 border border-slate-600 rounded-lg px-2 py-2 text-center text-white focus:outline-none focus:border-sky-500" />
+        <input type="number" placeholder="W" value={plate.w || ''} onChange={e => handlePlateChange(idx, 'w', e.target.value)}
+          className="bg-slate-950 border border-slate-600 rounded-lg px-2 py-2 text-center text-white focus:outline-none focus:border-sky-500" />
+        <input type="number" step="0.1" placeholder="T" value={plate.t || ''} onChange={e => handlePlateChange(idx, 't', e.target.value)}
+          className="bg-sky-900/20 border border-sky-500/40 rounded-lg px-2 py-2 text-center text-sky-400 font-bold focus:outline-none focus:border-sky-500" />
+      </div>
+    </div>
 
-                <div className="col-span-6 md:col-span-2">
-                  <label className="block text-xs text-sky-400 font-bold uppercase mb-1.5">Qty</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={plate.qty || ''}
-                    onChange={e => handlePlateChange(idx, 'qty', e.target.value)}
-                    className="w-full bg-slate-900 border-2 border-slate-600 rounded-lg px-4 py-3 text-2xl font-black text-center text-white focus:outline-none focus:border-sky-500"
-                  />
-                </div>
+    {/* Qty */}
+    <div className="col-span-6 md:col-span-2">
+      <label className="block text-[10px] text-sky-500 font-black uppercase tracking-widest mb-1.5 text-center">Qty</label>
+      <div className="flex items-center bg-slate-950 border border-slate-600 rounded-lg overflow-hidden">
+        <button type="button" onClick={() => handlePlateChange(idx, 'qty', Math.max(1, (parseInt(plate.qty) || 0) - 1))}
+          className="px-3 py-2 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">−</button>
+        <input type="number" value={plate.qty || ''} onChange={e => handlePlateChange(idx, 'qty', e.target.value)}
+          className="w-full bg-transparent text-lg font-bold text-center text-white focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+        <button type="button" onClick={() => handlePlateChange(idx, 'qty', (parseInt(plate.qty) || 0) + 1)}
+          className="px-3 py-2 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">+</button>
+      </div>
+    </div>
 
-                <div className="col-span-5 md:col-span-2">
-                  <label className="block text-xs text-slate-500 font-bold uppercase mb-1.5">Weight (kg)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={plate.weight || ''}
-                    onChange={e => handlePlateChange(idx, 'weight', e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2.5 text-white font-mono focus:outline-none focus:border-sky-500"
-                  />
-                </div>
+    {/* Weight */}
+    <div className="col-span-4 md:col-span-2">
+      <label className="block text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1.5">Weight (kg)</label>
+      <input
+        type="number" step="0.01" value={plate.weight || ''}
+        onChange={e => handlePlateChange(idx, 'weight', e.target.value)}
+        className="w-full bg-slate-950 border border-slate-600 rounded-lg px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-sky-500"
+      />
+    </div>
 
-                <div className="col-span-1 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (newDwg.plates.length > 1) {
-                        setNewDwg({
-                          ...newDwg,
-                          plates: newDwg.plates.filter((_, i) => i !== idx)
-                        });
-                      }
-                    }}
-                    disabled={newDwg.plates.length <= 1}
-                    className="p-2 text-slate-500 hover:text-red-400 disabled:opacity-40 transition"
-                  >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            ))}
+    {/* Delete Section - Red tint and spacing */}
+<div className="col-span-2 md:col-span-1 flex justify-center items-center h-[42px] ml-4">
+  <button
+    type="button"
+    title="Double click to delete"
+    onDoubleClick={() => {
+      if (newDwg.plates.length > 1) {
+        setNewDwg({
+          ...newDwg,
+          plates: newDwg.plates.filter((_, i) => i !== idx),
+        });
+      }
+    }}
+    disabled={newDwg.plates.length <= 1}
+    className="group flex items-center justify-center w-10 h-10 rounded-lg
+               transition-all duration-200
+               active:scale-95
+               disabled:opacity-20 disabled:cursor-not-allowed"
+  >
+    {/* Bold Outline Trash Icon */}
+    <svg
+      className="w-5 h-5 text-red-600/70 group-hover:text-red-600 transition-colors"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 6h18" />
+      <path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+      <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+    </svg>
+  </button>
+</div>
+  </div>
+))}
+
 
             <button
               type="button"
