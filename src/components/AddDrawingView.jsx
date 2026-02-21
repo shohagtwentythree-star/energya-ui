@@ -1,7 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
-const API_URL = 'http://localhost:3000/drawings';
+const API_BASE = 'http://localhost:3000';
+const DRAWINGS_URL = `${API_BASE}/drawings`;
+const FABRICATORS_URL = `${API_BASE}/fabricators`;
+
+const initialPlate = {
+  mark: '',
+  l: 0,
+  w: 0,
+  t: 0,
+  qty: 1,
+  weight: 0,
+  foundCount: 0
+};
 
 export default function AddDrawingView() {
   const [newDwg, setNewDwg] = useState({
@@ -9,273 +21,411 @@ export default function AddDrawingView() {
     dwgQty: 1,
     deliveryDate: '',
     status: 'new',
-    deliverTo: '', 
-    plates: [{ mark: '', l: 0, w: 0, t: 0, h: 0, qty: 1, weight: 0, foundCount: 0 }]
+    deliverTo: '',
+    plates: [initialPlate]
   });
-  
-  const navigate = useNavigate();
-  
-  const [teams, setTeams] = useState([]);
-  const [loading, setLoading] = useState(true); // Added to fix your undefined setLoading error
 
-  // --- NEW JSON IMPORT STATE ---
+  const navigate = useNavigate();
+  const [teams, setTeams] = useState([]);
+  const [existingNumbers, setExistingNumbers] = useState([]); // lowercase trimmed
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
   const [jsonInput, setJsonInput] = useState('');
   const [jsonError, setJsonError] = useState('');
+  const [tooltip, setTooltip] = useState({ show: false, type: '', text: '' });
 
-  const handlePlateChange = (index, field, value) => {
-    const updatedPlates = [...newDwg.plates];
-    updatedPlates[index][field] = value;
-    setNewDwg({ ...newDwg, plates: updatedPlates });
-  };
-  
-  const fetchTeams = async () => {
-    try {
-      const response = await fetch('http://localhost:3000/fabricators');
-      const result = await response.json();
-      if (result.status === "success") setTeams(result.data);
-    } catch (error) { console.error("Fetch error:", error); }
-    finally { setLoading(false); }
-  };
-  
-  useEffect(() => { fetchTeams(); }, []);
+  const [isDuplicate, setIsDuplicate] = useState(false);
 
-  // --- NEW JSON PARSER LOGIC ---
-  const handleJsonImport = () => {
-    try {
-      if (!jsonInput.trim()) return;
-      setJsonError('');
-      const parsedData = JSON.parse(jsonInput);
-      
-      if (!Array.isArray(parsedData)) throw new Error("Input must be a JSON Array");
+  // Load existing data once
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [teamRes, dwgRes] = await Promise.all([
+          fetch(FABRICATORS_URL),
+          fetch(DRAWINGS_URL)
+        ]);
 
-      // Filter out the total summary object
-      const actualData = parsedData.filter(item => item.type !== 'TOTAL_SUMMARY');
-
-      // Map the AI JSON to your specific plate structure
-      const importedPlates = actualData.map(item => {
-        let t = 0, w = 0;
-        
-        // Extract Thickness (T) and Width (W) from Profile (e.g., "PL30*550")
-        const profileStr = item.profile ? item.profile.toUpperCase() : '';
-        if (profileStr.includes('PL')) {
-          const dims = profileStr.replace('PL', '').trim().split(/[*X]/);
-          if (dims.length === 2) {
-             t = parseFloat(dims[0]) || 0;
-             w = parseFloat(dims[1]) || 0;
+        if (teamRes.ok) {
+          const teamData = await teamRes.json();
+          if (teamData.status === "success" && Array.isArray(teamData.data)) {
+            setTeams(teamData.data);
           }
         }
 
-        return {
-          mark: item.mark || '',
-          l: parseFloat(item.length) || 0,
-          w: w,
-          t: t,
-          h: 0,
-          qty: parseInt(item.qty) || 1,
-          weight: parseFloat(item.weight) || 0,
-          foundCount: 0
-        };
-      });
+        if (dwgRes.ok) {
+          const dwgData = await dwgRes.json();
+          const numbers = (dwgData.data || [])
+            .map(d => d.drawingNumber?.toString?.().trim?.().toLowerCase?.())
+            .filter(Boolean);
+          setExistingNumbers(numbers);
+        }
+      } catch (err) {
+        console.error("Failed to load initial data:", err);
+      } finally {
+        setIsDataLoaded(true);
+      }
+    };
 
-      // Update state with imported plates
+    loadData();
+  }, []);
+
+  // Live duplicate visual feedback
+  useEffect(() => {
+    if (!isDataLoaded || !newDwg.drawingNumber?.trim()) {
+      setIsDuplicate(false);
+      return;
+    }
+
+    const normalized = newDwg.drawingNumber.trim().toLowerCase();
+    setIsDuplicate(existingNumbers.includes(normalized));
+  }, [newDwg.drawingNumber, existingNumbers, isDataLoaded]);
+
+  // Tooltip auto-hide
+  useEffect(() => {
+    if (!tooltip.show) return;
+    const timer = setTimeout(() => setTooltip({ ...tooltip, show: false }), 5000);
+    return () => clearTimeout(timer);
+  }, [tooltip.show]);
+
+  const handlePlateChange = (index, field, value) => {
+    const updated = [...newDwg.plates];
+    if (['l', 'w', 't', 'qty', 'weight'].includes(field)) {
+      updated[index][field] = value === '' ? 0 : Number(value);
+    } else {
+      updated[index][field] = value;
+    }
+    setNewDwg({ ...newDwg, plates: updated });
+  };
+
+  const handleJsonImport = () => {
+    if (!jsonInput.trim()) return;
+    setJsonError('');
+
+    try {
+      const parsed = JSON.parse(jsonInput);
+      const plates = Array.isArray(parsed)
+        ? parsed.map(item => ({
+            mark: String(item.mark || ''),
+            l: Number(item.length ?? item.l ?? 0),
+            w: Number(item.width ?? 0),
+            t: Number(item.thickness ?? item.t ?? 0),
+            qty: Number(item.qty ?? item.count ?? 1),
+            weight: Number(item.weight ?? 0),
+            foundCount: 0
+          })).filter(p => p.mark.trim() || p.l || p.w || p.t || p.qty > 1)
+        : [];
+
       setNewDwg(prev => ({
         ...prev,
-        plates: importedPlates.length > 0 ? importedPlates : prev.plates
+        plates: plates.length ? plates : [initialPlate]
       }));
-      
-      setJsonInput(''); // Clear textarea on success
+      setJsonInput('');
+      setTooltip({ show: true, type: 'success', text: 'Plates imported' });
     } catch (err) {
-      setJsonError('Invalid JSON format. Check your input.');
+      setJsonError('Invalid JSON format');
     }
-  };
-
-  const addPlateField = () => {
-    setNewDwg({ 
-      ...newDwg, 
-      plates: [...newDwg.plates, { mark: '', l: 0, w: 0, t: 0, h: 0, qty: 1, weight: 0, foundCount: 0 }] 
-    });
-  };
-
-  const removePlateField = (index) => {
-    if (newDwg.plates.length === 1) return; // Keep at least one row
-    const updatedPlates = newDwg.plates.filter((_, i) => i !== index);
-    setNewDwg({ ...newDwg, plates: updatedPlates });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const totalPlatesCount = newDwg.plates.reduce((acc, p) => acc + (Number(p.qty) * Number(newDwg.dwgQty)), 0);
-    const dataToSave = { ...newDwg, totalPlates: totalPlatesCount, foundCount: 0 };
+
+    const number = (newDwg.drawingNumber || '').trim();
+    if (!number) {
+      setTooltip({ show: true, type: 'error', text: 'Drawing number required' });
+      return;
+    }
+
+    // Final duplicate check using latest loaded list
+    const normalized = number.toLowerCase();
+    if (existingNumbers.includes(normalized)) {
+      setIsDuplicate(true);
+      setTooltip({ show: true, type: 'error', text: 'Drawing number already exists!' });
+      return;
+    }
+
+    if (!isDataLoaded) {
+      setTooltip({ show: true, type: 'error', text: 'Still loading data...' });
+      return;
+    }
+
+    const totalPlates = newDwg.plates.reduce(
+      (acc, p) => acc + (Number(p.qty) || 0) * (Number(newDwg.dwgQty) || 1),
+      0
+    );
+
+    const payload = {
+      ...newDwg,
+      drawingNumber: number,
+      dwgQty: Number(newDwg.dwgQty) || 1,
+      totalPlates,
+      foundCount: 0
+    };
 
     try {
-      const response = await fetch(API_URL, {
+      const res = await fetch(DRAWINGS_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dataToSave)
+        body: JSON.stringify(payload)
       });
-      if (response.ok) onSuccess();
-    } catch (error) { console.error("Save error:", error); }
+
+      if (!res.ok) throw new Error(await res.text() || 'Save failed');
+
+      setTooltip({ show: true, type: 'success', text: 'Saved successfully' });
+      
+      // Update local list immediately
+      setExistingNumbers(prev => [...new Set([...prev, normalized])]);
+
+      // Optional: reset form
+      // setNewDwg({ drawingNumber: '', dwgQty: 1, deliveryDate: '', status: 'new', deliverTo: '', plates: [initialPlate] });
+      // navigate('/drawings');
+
+    } catch (err) {
+      console.error(err);
+      setTooltip({ show: true, type: 'error', text: 'Failed to save' });
+    }
   };
 
+  const canSubmit = isDataLoaded && !isDuplicate && newDwg.drawingNumber?.trim();
+
   return (
-    <div className="w-full min-h-screen bg-slate-900 p-3 md:p-6">
-      <div className="max-w-[1200px] mx-auto">
-        {/* Header - More Compact */}
-        <div className="flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
-          <h2 className="text-3xl font-black text-white italic tracking-tighter">NEW DRAWING</h2>
-          <button onClick={() => navigate('/drawings')} type="button" className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-4 py-2 rounded-lg font-bold transition uppercase tracking-widest">
+    <div className="w-full min-h-screen bg-slate-900 p-4 md:p-6 relative">
+      {/* Tooltip */}
+      {tooltip.show && (
+        <div
+          className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-xl border shadow-2xl ${
+            tooltip.type === 'success'
+              ? 'bg-emerald-600 border-emerald-400 text-white'
+              : 'bg-red-600 border-red-400 text-white'
+          }`}
+        >
+          <span className="font-black uppercase tracking-widest text-sm">{tooltip.text}</span>
+        </div>
+      )}
+
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="flex justify-between items-center mb-6 border-b border-slate-700 pb-4">
+          <h2 className="text-3xl font-black text-white tracking-tight">ADD NEW DRAWING</h2>
+          <button
+            onClick={() => navigate('/drawings')}
+            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium transition"
+          >
             Cancel
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Main Info Card - Reduced Padding */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-slate-800/50 p-5 rounded-2xl border border-slate-700/50 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-1 h-full bg-sky-500"></div>
-            
-            <div className="col-span-2 md:col-span-1">
-              <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Drawing Number</label>
-              <input required type="text" placeholder="DWG-001" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white font-bold outline-none focus:ring-2 focus:ring-sky-500/50 transition-all" 
-                value={newDwg.drawingNumber} onChange={e => setNewDwg({...newDwg, drawingNumber: e.target.value})} />
+        <form onSubmit={handleSubmit} className="space-y-8">
+          {/* Main info */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-5 bg-slate-800/50 p-6 rounded-xl border border-slate-700 relative">
+            <div className={`absolute top-0 left-0 w-1 h-full ${isDuplicate ? 'bg-red-500' : isDataLoaded ? 'bg-sky-500' : 'bg-amber-500'}`}></div>
+
+            <div className="md:col-span-1">
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                Drawing Number
+              </label>
+              <input
+                required
+                type="text"
+                placeholder="e.g. DWG-2567"
+                disabled={!isDataLoaded}
+                className={`w-full bg-slate-900 border ${
+                  isDuplicate ? 'border-red-500 ring-2 ring-red-500/30' : 'border-slate-600'
+                } rounded-lg px-4 py-2.5 text-white font-medium focus:outline-none focus:ring-2 focus:ring-sky-500/50 transition-all ${
+                  !isDataLoaded && 'opacity-60 cursor-wait'
+                }`}
+                value={newDwg.drawingNumber}
+                onChange={e => setNewDwg({ ...newDwg, drawingNumber: e.target.value })}
+              />
+              {isDuplicate && isDataLoaded && (
+                <p className="mt-1.5 text-xs text-red-400 font-medium">Already in use</p>
+              )}
             </div>
 
             <div>
-              <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Sets (Qty)</label>
-              <input required type="number" min="1" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white font-bold outline-none focus:ring-2 focus:ring-sky-500/50" 
-                value={newDwg.dwgQty} onChange={e => setNewDwg({...newDwg, dwgQty: e.target.value})} />
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                Sets (Qty)
+              </label>
+              <input
+                required
+                type="number"
+                min="1"
+                className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2.5 text-white font-medium focus:outline-none focus:border-sky-500"
+                value={newDwg.dwgQty}
+                onChange={e => setNewDwg({ ...newDwg, dwgQty: e.target.value === '' ? '' : Number(e.target.value) })}
+              />
             </div>
 
-            {/* Fabricator Selection */}
             <div>
-              <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
                 Fabricator
               </label>
-              <div className="relative">
-                <select 
-                  value={newDwg.deliverTo || ""} 
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white font-bold outline-none focus:ring-2 focus:ring-sky-500/50 appearance-none cursor-pointer"
-                  onChange={e => setNewDwg({...newDwg, deliverTo: e.target.value})}
-                >
-                  <option value="" disabled>Select Fab Team</option>
-                  {teams.map((team, index) => (
-                    <option key={index} value={team.teamLead} className="bg-slate-900">
-                      {team.teamLead}
-                    </option>
-                  ))}
-                </select>
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400">
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </div>
+              <select
+                value={newDwg.deliverTo || ""}
+                onChange={e => setNewDwg({ ...newDwg, deliverTo: e.target.value })}
+                className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2.5 text-white font-medium focus:outline-none focus:border-sky-500 appearance-none"
+              >
+                <option value="" disabled>Select team</option>
+                {teams.map((t, i) => (
+                  <option key={i} value={t.teamLead}>{t.teamLead}</option>
+                ))}
+              </select>
             </div>
 
-            <div className="col-span-2 md:col-span-1">
-              <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1.5 block">Delivery Date</label>
-              <input type="date" className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white font-bold outline-none focus:ring-2 focus:ring-sky-500/50" 
-                value={newDwg.deliveryDate} onChange={e => setNewDwg({...newDwg, deliveryDate: e.target.value})} />
+            <div>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                Delivery Date
+              </label>
+              <input
+                type="date"
+                value={newDwg.deliveryDate}
+                onChange={e => setNewDwg({ ...newDwg, deliveryDate: e.target.value })}
+                className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2.5 text-white font-medium focus:outline-none focus:border-sky-500"
+              />
             </div>
           </div>
 
-          {/* --- NEW: JSON IMPORT UI --- */}
-          <div className="bg-slate-800/50 p-4 rounded-xl border border-sky-900/50 space-y-2">
-            <div className="flex justify-between items-center">
-              <label className="text-[10px] font-black text-sky-400 tracking-[0.2em] uppercase">AI JSON Auto-Fill</label>
-              {jsonError && <span className="text-[10px] text-red-400 font-bold">{jsonError}</span>}
-            </div>
-            <div className="flex gap-2">
-              <textarea 
-                className="flex-1 bg-slate-900 border border-slate-700 rounded-lg p-2 text-sky-300 text-xs font-mono outline-none focus:border-sky-500 resize-none h-12"
-                placeholder="Paste the JSON output from the AI here..."
+          {/* JSON Import */}
+          <div className="bg-slate-800/50 p-5 rounded-xl border border-sky-900/40">
+            <label className="block text-xs font-black text-sky-400 uppercase tracking-wider mb-2">
+              JSON Auto-Fill (AI / Copy-Paste)
+            </label>
+            <div className="flex gap-3">
+              <textarea
                 value={jsonInput}
                 onChange={e => setJsonInput(e.target.value)}
+                placeholder='[{"mark":"PL01","length":1200,"width":800,"thickness":10,"qty":5}, ...]'
+                className="flex-1 bg-slate-900 border border-slate-600 rounded-lg p-3 text-sky-200 text-sm font-mono resize-y min-h-[80px] focus:outline-none focus:border-sky-500"
               />
-              <button 
+              <button
                 type="button"
                 onClick={handleJsonImport}
-                className="bg-sky-600 hover:bg-sky-500 text-white text-[10px] font-black uppercase tracking-widest px-4 rounded-lg transition-all whitespace-nowrap active:scale-95"
+                className="px-6 py-3 bg-sky-600 hover:bg-sky-500 text-white font-medium rounded-lg transition"
               >
-                Auto-Fill
+                Import
               </button>
             </div>
+            {jsonError && <p className="mt-2 text-sm text-red-400">{jsonError}</p>}
           </div>
 
-          {/* Components List */}
-          <div className="space-y-3">
-            <div className="flex justify-between items-center px-2">
-              <h3 className="text-[10px] font-black text-slate-400 tracking-[0.2em] uppercase">Plate Components</h3>
-              <span className="text-[10px] text-slate-600 font-bold">{newDwg.plates.length} Items</span>
-            </div>
+          {/* Plates */}
+          <div className="space-y-5">
+            <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider">Plate Components</h3>
 
-            {newDwg.plates.map((plate, index) => (
-              <div key={index} className="group grid grid-cols-4 md:grid-cols-12 gap-3 bg-slate-800/30 p-3 rounded-xl border border-slate-700/40 hover:border-slate-600 transition-colors relative">
-                
-                {/* Plate Mark */}
-                <div className="col-span-4 md:col-span-3">
-                  <label className="text-[8px] uppercase text-slate-500 font-bold mb-1 block">Plate Mark</label>
-                  <input required placeholder="Mark" className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm font-bold focus:border-sky-500 outline-none" 
-                    value={plate.mark} onChange={e => handlePlateChange(index, 'mark', e.target.value)} />
+            {newDwg.plates.map((plate, idx) => (
+              <div
+                key={idx}
+                className="grid grid-cols-12 gap-4 bg-slate-800/40 p-5 rounded-xl border border-slate-700 hover:border-slate-600 transition-colors items-end"
+              >
+                <div className="col-span-12 md:col-span-3">
+                  <label className="block text-xs text-slate-500 font-bold uppercase mb-1.5">Mark</label>
+                  <input
+                    required
+                    value={plate.mark}
+                    onChange={e => handlePlateChange(idx, 'mark', e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-sky-500"
+                  />
                 </div>
 
-                {/* Dimensions Group */}
-                <div className="col-span-4 md:col-span-4">
-                  <label className="text-[8px] uppercase text-slate-500 font-bold mb-1 block">L x W x T (mm)</label>
-                  <div className="flex gap-1">
-                    <input type="number" placeholder="L" className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white text-xs" 
-                      value={plate.l || ''} onChange={e => handlePlateChange(index, 'l', e.target.value)} />
-                    <input type="number" placeholder="W" className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white text-xs" 
-                      value={plate.w || ''} onChange={e => handlePlateChange(index, 'w', e.target.value)} />
-                    <input type="number" placeholder="T" className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white text-xs font-bold text-sky-400" 
-                      value={plate.t || ''} onChange={e => handlePlateChange(index, 't', e.target.value)} />
+                <div className="col-span-12 md:col-span-4">
+                  <label className="block text-xs text-slate-500 font-bold uppercase mb-1.5">L × W × T (mm)</label>
+                  <div className="grid grid-cols-3 gap-3">
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="L"
+                      value={plate.l || ''}
+                      onChange={e => handlePlateChange(idx, 'l', e.target.value)}
+                      className="bg-slate-900 border border-slate-600 rounded-lg px-3 py-2.5 text-center text-white focus:outline-none focus:border-sky-500"
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="W"
+                      value={plate.w || ''}
+                      onChange={e => handlePlateChange(idx, 'w', e.target.value)}
+                      className="bg-slate-900 border border-slate-600 rounded-lg px-3 py-2.5 text-center text-white focus:outline-none focus:border-sky-500"
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      placeholder="T"
+                      value={plate.t || ''}
+                      onChange={e => handlePlateChange(idx, 't', e.target.value)}
+                      className="bg-slate-800 border border-sky-600/40 rounded-lg px-3 py-2.5 text-center text-sky-300 font-medium focus:outline-none focus:border-sky-500"
+                    />
                   </div>
                 </div>
 
-                {/* H, Qty, Weight */}
-                <div className="col-span-1 md:col-span-1">
-                  <label className="text-[8px] uppercase text-slate-500 font-bold mb-1 block">H</label>
-                  <input type="number" className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white text-xs" 
-                    value={plate.h || ''} onChange={e => handlePlateChange(index, 'h', e.target.value)} />
-                </div>
-                
-                <div className="col-span-1 md:col-span-1">
-                  <label className="text-[8px] uppercase text-slate-500 font-bold mb-1 block">Qty</label>
-                  <input type="number" className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white text-xs font-bold" 
-                    value={plate.qty || ''} onChange={e => handlePlateChange(index, 'qty', e.target.value)} />
+                <div className="col-span-6 md:col-span-2">
+                  <label className="block text-xs text-sky-400 font-bold uppercase mb-1.5">Qty</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={plate.qty || ''}
+                    onChange={e => handlePlateChange(idx, 'qty', e.target.value)}
+                    className="w-full bg-slate-900 border-2 border-slate-600 rounded-lg px-4 py-3 text-2xl font-black text-center text-white focus:outline-none focus:border-sky-500"
+                  />
                 </div>
 
-                <div className="col-span-2 md:col-span-2">
-                  <label className="text-[8px] uppercase text-slate-500 font-bold mb-1 block">Unit Weight (kg)</label>
-                  <input type="number" step="0.01" className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white text-xs font-mono" 
-                    value={plate.weight || ''} onChange={e => handlePlateChange(index, 'weight', e.target.value)} />
+                <div className="col-span-5 md:col-span-2">
+                  <label className="block text-xs text-slate-500 font-bold uppercase mb-1.5">Weight (kg)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={plate.weight || ''}
+                    onChange={e => handlePlateChange(idx, 'weight', e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2.5 text-white font-mono focus:outline-none focus:border-sky-500"
+                  />
                 </div>
 
-                {/* Remove Row Button */}
-                <div className="col-span-4 md:col-span-1 flex items-end justify-end">
-                  <button 
-                    type="button" 
-                    onClick={() => removePlateField(index)}
-                    className="p-2 text-slate-600 hover:text-red-400 transition-colors"
+                <div className="col-span-1 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (newDwg.plates.length > 1) {
+                        setNewDwg({
+                          ...newDwg,
+                          plates: newDwg.plates.filter((_, i) => i !== idx)
+                        });
+                      }
+                    }}
+                    disabled={newDwg.plates.length <= 1}
+                    className="p-2 text-slate-500 hover:text-red-400 disabled:opacity-40 transition"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </button>
                 </div>
               </div>
             ))}
 
-            <button type="button" onClick={addPlateField} className="w-full py-3 border border-dashed border-slate-700 rounded-xl text-slate-500 font-bold hover:text-sky-500 hover:border-sky-500 hover:bg-sky-500/5 transition-all uppercase tracking-[0.2em] text-[10px]">
-              + Add Component Row
+            <button
+              type="button"
+              onClick={() => setNewDwg({ ...newDwg, plates: [...newDwg.plates, { ...initialPlate }] })}
+              className="w-full py-4 border-2 border-dashed border-slate-600 rounded-xl text-slate-400 hover:text-sky-400 hover:border-sky-500 transition font-medium text-sm uppercase tracking-wider"
+            >
+              + Add Plate Row
             </button>
           </div>
 
-          {/* Submit Action */}
-          <div className="pt-4">
-            <button type="submit" className="w-full bg-sky-600 hover:bg-sky-500 text-white font-black py-4 rounded-xl shadow-lg shadow-sky-900/20 transition-all uppercase tracking-[0.3em] active:scale-[0.98]">
-              Finalize & Save Record
-            </button>
-          </div>
+          {/* Submit */}
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            className={`w-full py-5 rounded-xl font-black uppercase tracking-widest text-lg transition-all ${
+              canSubmit
+                ? 'bg-sky-600 hover:bg-sky-500 text-white shadow-lg shadow-sky-900/30'
+                : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
+            }`}
+          >
+            {!isDataLoaded
+              ? 'Loading data...'
+              : isDuplicate
+              ? 'DUPLICATE NUMBER'
+              : 'SAVE DRAWING'}
+          </button>
         </form>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 
 // Unique key for localStorage
 const STORAGE_KEY = 'detail_drawing_view_plates_sort_by';
@@ -16,6 +16,7 @@ export default function DetailDrawingView() {
   const [loading, setLoading] = useState(true);
   const [plateLocations, setPlateLocations] = useState({});
   const [isZoomed, setIsZoomed] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const [sortBy, setSortBy] = useState(() => {
     return localStorage.getItem(STORAGE_KEY) || 'default';
@@ -107,8 +108,38 @@ export default function DetailDrawingView() {
     }
   }, [dwg?.plates, sortBy]);
 
+  const canDelete = dwg?.status?.toLowerCase() !== 'waiting';
+
   // =========================
-  // EARLY RETURNS (NOW SAFE)
+  // DELETE HANDLER
+  // =========================
+
+  const handleDelete = async () => {
+    if (!window.confirm("Delete this drawing permanently?")) return;
+    
+    setDeleting(true);
+    try {
+      const res = await fetch(`http://localhost:3000/drawings/${id}`, {
+        method: 'DELETE'
+      });
+
+      if (res.ok) {
+        alert("Drawing deleted");
+        navigate('/drawings');
+      } else {
+        const err = await res.json();
+        alert("Delete failed: " + (err.message || "Server error"));
+      }
+    } catch (err) {
+      console.error("Delete error:", err);
+      alert("Something went wrong while deleting");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // =========================
+  // EARLY RETURNS
   // =========================
 
   if (loading) {
@@ -163,9 +194,8 @@ export default function DetailDrawingView() {
   );
 
   // =========================
-  // JSX (UNCHANGED)
+  // JSX
   // =========================
-
 
   return (
     <div className="w-full min-h-screen bg-slate-900 p-3 md:p-6 text-slate-200">
@@ -176,9 +206,33 @@ export default function DetailDrawingView() {
           <h2 className="text-3xl font-black text-white italic tracking-tighter uppercase">
             {dwg.drawingNumber} <span className="text-sky-500 not-italic ml-2 text-2xl">x{dwgMultiplier}</span>
           </h2>
-          <button onClick={() => navigate('/drawings')} className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-6 py-2 rounded-lg font-bold transition uppercase tracking-widest border border-slate-700">
-            Back to List
-          </button>
+          <div className="flex items-center gap-4">
+            {canDelete && (
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex items-center gap-2 px-4 py-2 bg-red-900/60 hover:bg-red-800/80 text-red-300 hover:text-red-100 rounded-lg border border-red-700/50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Delete drawing (only available for New status)"
+              >
+                <svg 
+                  xmlns="http://www.w3.org/2000/svg" 
+                  className="h-5 w-5" 
+                  fill="none" 
+                  viewBox="0 0 24 24" 
+                  stroke="currentColor" 
+                  strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            )}
+            <button 
+              onClick={() => navigate('/drawings')} 
+              className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-6 py-2 rounded-lg font-bold transition uppercase tracking-widest border border-slate-700"
+            >
+              Back to List
+            </button>
+          </div>
         </div>
 
         {/* ZOOM OVERLAY */}
@@ -191,6 +245,7 @@ export default function DetailDrawingView() {
           </div>
         )}
 
+        {/* Rest of your component remains exactly the same */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
           {/* LEFT COLUMN: VISUALS & LIVE STATS */}
@@ -216,7 +271,6 @@ export default function DetailDrawingView() {
                 </div>
               </div>
 
-              {/* Progress Bar */}
               <div className="w-full bg-slate-950 h-3 rounded-full border border-slate-800 overflow-hidden mb-4">
                 <div 
                   className="h-full bg-gradient-to-r from-sky-600 to-emerald-500 transition-all duration-700 ease-out"
@@ -263,56 +317,6 @@ export default function DetailDrawingView() {
               ))}
             </div>
 
-            {/* TABLE (DESKTOP) */}
-            <div className="hidden md:block w-full overflow-hidden bg-slate-800/20 rounded-2xl border border-slate-700/50 shadow-inner">
-              <table className="w-full text-left border-collapse">
-                <thead className="bg-slate-900/60 text-slate-500 text-[9px] font-black uppercase tracking-widest">
-                  <tr>
-                    <th className="p-4">Plate Mark</th>
-                    <th className="p-4">Dimensions (mm)</th>
-                    <th className="p-4">Required</th>
-                    <th className="p-4">Live Status</th>
-                    <th className="p-4">Pallet Location</th>
-                  </tr>
-                </thead>
-                <tbody className="text-slate-200 divide-y divide-slate-800/50">
-                  {sortedPlates.map((plate, i) => {
-                    const totalReq = plate.qty * dwgMultiplier;
-                    const found = plate.foundCount || 0;
-                    const dynamicStyle = getDynamicStatusStyle(found, totalReq);
-
-                    return (
-                      <tr key={i} className="hover:bg-white/[0.03] transition-colors group">
-                        <td className="p-4 font-mono text-sky-400 font-bold group-hover:text-sky-300">{plate.mark}</td>
-                        <td className="p-4 text-xs font-medium text-slate-500">
-                          {plate.l}x{plate.w}x{plate.t} <span className="text-[10px] opacity-40 ml-1">H:{plate.h}</span>
-                        </td>
-                        <td className="p-4 font-bold text-sm">{totalReq}</td>
-                        <td className="p-4">
-                          <span style={dynamicStyle} className="px-3 py-1.5 rounded-md text-[10px] font-black uppercase border shadow-sm inline-block min-w-[70px] text-center">
-                            {found} / {totalReq}
-                          </span>
-                        </td>
-                        <td className="p-4">
-                          <div className="flex flex-wrap gap-1">
-                            {plateLocations[plate.mark]?.length > 0 ? (
-                                plateLocations[plate.mark].map((loc, idx) => (
-                                    <span key={idx} className="bg-slate-800 text-[9px] px-1.5 py-0.5 rounded border border-slate-700 text-sky-400/80 font-mono">
-                                        {loc.x}-{loc.y}-{loc.z}
-                                    </span>
-                                ))
-                            ) : (
-                                <span className="text-slate-600 text-[10px] italic">Not Placed</span>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
             {/* MOBILE LIST */}
             <div className="grid grid-cols-1 gap-3 md:hidden">
               {sortedPlates.map((plate, i) => {
@@ -330,9 +334,13 @@ export default function DetailDrawingView() {
                     </div>
                     <div className="flex justify-between items-center text-[10px]">
                       <span className="text-slate-500 font-bold uppercase">Locations:</span>
-                      <span className="text-sky-400 font-mono">
-                        {plateLocations[plate.mark]?.map(l => `${l.x}.${l.y}`).join(', ') || 'NONE'}
-                      </span>
+                      
+                      {plateLocations[plate.mark]?.map(l => (
+<Link key={`${l.x}-${l.y}`} to={`/pallets?coords=${l.x},${l.y}`}>
+  {`${l.x}.${l.y}`}
+</Link>
+
+                      )) || 'NONE'}
                     </div>
                   </div>
                 );

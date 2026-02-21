@@ -58,6 +58,7 @@ export default function Login({ onLoginSuccess, onSwitchToRegister }) {
               type="text" 
               placeholder="Username"
               required
+              autocomplete="username"
               className="w-full bg-slate-950/50 border border-white/5 rounded-xl px-4 py-4 text-white focus:outline-none focus:border-sky-500/50 transition-all placeholder:text-slate-700"
               value={formData.username}
               onChange={e => setFormData({...formData, username: e.target.value})}

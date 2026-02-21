@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import DataPanel from "./DataPanel";
+import { useSearchParams, Link } from 'react-router-dom';
 
 const API_URL = 'http://localhost:3000';
 const API_PALLETS = API_URL + "/pallets";
@@ -17,28 +17,58 @@ const Icons = {
 };
 
 
+ // 1. Import the hook
+
 export default function Pallets() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  
   const [allPallets, setAllPallets] = useState([]);
   const [drawings, setDrawings] = useState([]);
+  
   const [activeCoord, setActiveCoord] = useState(() => {
+    // 3. Priority logic: URL params > LocalStorage > Default
+    const coordsParam = searchParams.get('coords'); // e.g., "5,3"
+    
+    if (coordsParam) {
+      const [x, y] = coordsParam.split(',').map(Number);
+      if (!isNaN(x) && !isNaN(y)) {
+        return { x, y };
+      }
+    }
+
     const saved = localStorage.getItem('lastActiveCoord');
     return saved ? JSON.parse(saved) : { x: 0, y: 0 };
   });
 
-  const activeZ = 0;
+  // 4. Update coordinates if the URL changes while the component is open
+  useEffect(() => {
+    const coordsParam = searchParams.get('coords');
+    if (coordsParam) {
+      const [x, y] = coordsParam.split(',').map(Number);
+      if (!isNaN(x) && !isNaN(y)) {
+        setActiveCoord({ x, y });
+      }
+    }
+  }, [searchParams]);
 
+  // Persist to localStorage whenever activeCoord changes
+  useEffect(() => {
+    localStorage.setItem('lastActiveCoord', JSON.stringify(activeCoord));
+  }, [activeCoord]);
+
+  const activeZ = 0;
   const [inputValue, setInputValue] = useState('');
   const [orderInput, setOrderInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
 
-  // -------- FIND CURRENT PALLET --------
   const currentPalletDoc = allPallets.find(
     p =>
       p.x === activeCoord.x &&
       p.y === activeCoord.y &&
       p.z === activeZ
   );
+
 
   const activePlates = currentPalletDoc ? currentPalletDoc.plates : [];
 
@@ -69,15 +99,23 @@ export default function Pallets() {
   
     // Robust coordinate handler
   const handleCoordChange = (axis, value) => {
-    if (value === "") {
-      setActiveCoord(prev => ({ ...prev, [axis]: "" }));
-      return;
-    }
-    const num = parseInt(value, 10);
-    if (!isNaN(num)) {
-      setActiveCoord(prev => ({ ...prev, [axis]: num }));
-    }
-  };
+  // 1. Clear the URL parameters
+  if (searchParams.has('coords')) {
+    setSearchParams({}, { replace: true });
+  }
+
+  // 2. Handle the state update
+  if (value === "") {
+    setActiveCoord(prev => ({ ...prev, [axis]: "" }));
+    return;
+  }
+  
+  const num = parseInt(value, 10);
+  if (!isNaN(num)) {
+    setActiveCoord(prev => ({ ...prev, [axis]: num }));
+  }
+};
+
 
   
   // 🔥 FIXED MATCHING FUNCTION
@@ -95,6 +133,7 @@ const matchPlatesWithDrawings = (pallets, drawings) => {
       if (!plateLookup[mark]) plateLookup[mark] = [];
 
       plateLookup[mark].push({
+        _id : drawing._id,
   drawingNumber: drawing.drawingNumber,
   requiredQuantity: Number(plate.qty || 0) * Number(drawing.dwgQty || 0),
   length: Number(plate.l || 0),
@@ -456,6 +495,7 @@ const updateOrderNumber = async () => {
         activeZ={activeZ}
         setActiveCoord={setActiveCoord}
         setInputValue={setInputValue}
+        setSearchParams={setSearchParams}
       />
               ))
             ) : (
@@ -490,16 +530,17 @@ const updateOrderNumber = async () => {
                       #{result.orderNumber || 'NO-ORD'}
                     </span>
                   </div>
+<button
+  onClick={() => {
+    setSearchParams({}, { replace: true }); // Clear URL
+    setActiveCoord({ x: result.x, y: result.y });
+    setInputValue('');
+  }}
+  className="text-[10px] font-black text-sky-500"
+>
+  JUMP TO
+</button>
 
-                  <button
-                    onClick={() => {
-                      setActiveCoord({ x: result.x, y: result.y });
-                      setInputValue('');
-                    }}
-                    className="text-[10px] font-black text-sky-500"
-                  >
-                    JUMP TO
-                  </button>
                 </div>
 
                 {result.matches.map((plate, pi) => (
@@ -531,7 +572,8 @@ const PlateRow = ({
   activeCoord = { x: 0, y: 0 }, 
   activeZ = 0, 
   setActiveCoord, 
-  setInputValue 
+  setInputValue, 
+  setSearchParams
 }) => {
   
   // Now these references will work correctly via props
@@ -600,6 +642,7 @@ const PlateRow = ({
                 key={idx}
                 onClick={() => {
                    // Ensure these are called safely
+                   setSearchParams({}, { replace: true }); 
                    if (setActiveCoord) setActiveCoord({ x: loc.x, y: loc.y });
                    if (setInputValue) setInputValue(''); 
                 }}
@@ -622,17 +665,29 @@ const PlateRow = ({
         </div>
       )}
 
-      {/* Drawing Info */}
-      {plate.drawings?.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {plate.drawings.map((d, i) => (
-            <div key={i} className="flex items-center gap-2 bg-emerald-500/5 border border-emerald-500/10 px-2 py-1 rounded text-[10px]">
-              <span className="text-slate-400 font-mono"># {d.drawingNumber}</span>
-              <span className="text-emerald-400 font-bold italic">Qty {d.requiredQuantity}</span>
-            </div>
-          ))}
+{/* Drawing Info */}
+{plate.drawings?.length > 0 && (
+  <div className="mt-3 flex flex-wrap gap-2">
+    {plate.drawings.map((d, i) => (
+      <Link 
+        key={i} 
+        to={`/drawings/${d._id}`} // Or d._id depending on your route setup
+        className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded text-[10px] hover:bg-emerald-500/20 hover:border-emerald-500/40 transition-all group/dwg"
+      >
+        <span className="text-slate-400 font-mono group-hover/dwg:text-slate-200">
+          # {d.drawingNumber}
+        </span>
+        <span className="text-emerald-400 font-bold italic">
+          Qty {d.requiredQuantity}
+        </span>
+        {/* Subtle arrow to indicate it's a link */}
+        <div className="text-emerald-500/50 group-hover/dwg:text-emerald-400">
+          <Icons.ArrowRight /> 
         </div>
-      )}
+      </Link>
+    ))}
+  </div>
+)}
     </div>
   );
 };
