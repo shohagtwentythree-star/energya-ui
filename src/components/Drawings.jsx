@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from "react-router-dom";
 
 const API_URL = 'http://localhost:3000/drawings/';
@@ -7,13 +7,12 @@ const STATUS_WORKFLOW = [
   'new', 'waiting', 'fabricating', 'welding', 'cleaning', 'inspection', 'complete', 'delivered'
 ];
 
-// Key for storing the last selected status tab
 const ACTIVE_STATUS_KEY = 'drawings_active_status_tab';
 
 export default function Drawings() {
   const navigate = useNavigate();
 
-  // Load saved status from localStorage, fallback to first status
+  // --- STATE ---
   const [activeStatus, setActiveStatus] = useState(() => {
     const saved = localStorage.getItem(ACTIVE_STATUS_KEY);
     return saved && STATUS_WORKFLOW.includes(saved) ? saved : STATUS_WORKFLOW[0];
@@ -25,12 +24,11 @@ export default function Drawings() {
   const [expandedId, setExpandedId] = useState(null);
   const [notification, setNotification] = useState(null);
 
-  // Save active status to localStorage whenever it changes
+  // --- PERSISTENCE & TOASTS ---
   useEffect(() => {
     localStorage.setItem(ACTIVE_STATUS_KEY, activeStatus);
   }, [activeStatus]);
 
-  // Toast auto-dismiss
   useEffect(() => {
     if (notification) {
       const timer = setTimeout(() => setNotification(null), 3500);
@@ -38,15 +36,12 @@ export default function Drawings() {
     }
   }, [notification]);
 
-  const showToast = (message, type = 'success') => {
+  const showToast = useCallback((message, type = 'success') => {
     setNotification({ message, type });
-  };
-
-  useEffect(() => {
-    fetchDrawings();
   }, []);
 
-  const fetchDrawings = async () => {
+  // --- DATA FETCHING ---
+  const fetchDrawings = useCallback(async () => {
     try {
       const response = await fetch(API_URL);
       const result = await response.json();
@@ -59,13 +54,17 @@ export default function Drawings() {
       }
     } catch (error) { 
       showToast("Critical: Failed to sync with database", "error");
-      console.error("Fetch error:", error); 
     } finally { 
       setLoading(false); 
     }
-  };
+  }, [showToast]);
 
-  const getNextAvailableSN = () => {
+  useEffect(() => {
+    fetchDrawings();
+  }, [fetchDrawings]);
+
+  // --- LOGIC HELPERS ---
+  const getNextAvailableSN = useCallback(() => {
     const waitingSns = drawings
       .filter(d => d.status === 'waiting' && d.serialNumber)
       .map(d => Number(d.serialNumber))
@@ -77,8 +76,42 @@ export default function Drawings() {
       else if (sn > next) break;
     }
     return next;
-  };
+  }, [drawings]);
 
+  const getCounts = useCallback((dwg) => {
+    const multiplier = Number(dwg.dwgQty) || 1;
+    if (!dwg.plates || dwg.plates.length === 0) {
+      return { found: dwg.foundCount || 0, total: (dwg.totalPlates || 0) * multiplier };
+    }
+    const total = dwg.plates.reduce((acc, p) => acc + (Number(p.qty) * multiplier), 0);
+    const found = dwg.plates.reduce((acc, p) => acc + (Number(p.foundCount) || 0), 0);
+    return { found, total };
+  }, []);
+
+  // --- MEMOIZED DATA ---
+  const filteredDrawings = useMemo(() => {
+    const lowerSearch = searchTerm.toLowerCase();
+    return drawings.filter(dwg => {
+      const matchesSearch = dwg.drawingNumber?.toLowerCase().includes(lowerSearch) || 
+                            dwg.plates?.some(p => p.mark?.toLowerCase().includes(lowerSearch));
+      const matchesStatus = dwg.status === activeStatus;
+      return matchesSearch && matchesStatus;
+    });
+  }, [drawings, searchTerm, activeStatus]);
+
+  const statusCounts = useMemo(() => {
+    return STATUS_WORKFLOW.reduce((acc, status) => {
+      acc[status] = drawings.filter(d => d.status === status).length;
+      return acc;
+    }, {});
+  }, [drawings]);
+
+  const globalStats = useMemo(() => ({
+    total: drawings.length,
+    completed: drawings.filter(d => d.status === 'complete' || d.status === 'delivered').length
+  }), [drawings]);
+
+  // --- ACTIONS ---
   const updateStatus = async (e, dwg, direction, manualSN = null) => {
     if (e) e.stopPropagation(); 
     const currentIndex = STATUS_WORKFLOW.indexOf(dwg.status);
@@ -93,121 +126,63 @@ export default function Drawings() {
     let assignedSN = dwg.serialNumber;
 
     if (newStatus === 'waiting') {
-      if (manualSN) {
-        assignedSN = manualSN;
-      } else if (!dwg.serialNumber) {
-        assignedSN = getNextAvailableSN();
-      }
+      assignedSN = manualSN || dwg.serialNumber || getNextAvailableSN();
     } else if (newStatus === 'new') {
       assignedSN = null;
     }
 
     const oldDrawings = [...drawings];
+    setDrawings(prev => prev.map(d => 
+      d._id === dwg._id ? { ...d, status: newStatus, serialNumber: assignedSN } : d
+    ));
 
     try {
-      setDrawings(prev => prev.map(d => 
-        d._id === dwg._id ? { ...d, status: newStatus, serialNumber: assignedSN } : d
-      ));
-
       const response = await fetch(API_URL + dwg._id, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus, serialNumber: assignedSN })
       });
-
       if (!response.ok) throw new Error("Server failed");
-      
-      showToast(`${dwg.drawingNumber} updated to ${newStatus.toUpperCase()}`);
+      showToast(`${dwg.drawingNumber} → ${newStatus.toUpperCase()}`);
     } catch (error) {
       showToast(error.message, "error");
       setDrawings(oldDrawings);
-      fetchDrawings();
     }
-  };
-
-  const handleManualSNUpdate = async (dwg, inputVal) => {
-    const newSN = parseInt(inputVal);
-    if (isNaN(newSN) || newSN <= 0) {
-        showToast("Invalid Serial Number format", "error");
-        return;
-    }
-
-    const isTaken = drawings.some(d => d.status === 'waiting' && d.serialNumber === newSN && d._id !== dwg._id);
-    if (isTaken) {
-      showToast(`Serial Number ${newSN} is already assigned!`, "error");
-      return;
-    }
-
-    try {
-      setDrawings(prev => prev.map(d => d._id === dwg._id ? { ...d, serialNumber: newSN } : d));
-      const response = await fetch(API_URL + dwg._id, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ serialNumber: newSN })
-      });
-      if (response.ok) showToast(`Serial Number updated to #${newSN}`);
-    } catch (error) {
-      showToast("Failed to update Serial Number", "error");
-      fetchDrawings();
-    }
-  };
-
-  const getCounts = (dwg) => {
-    const multiplier = Number(dwg.dwgQty) || 1;
-    if (!dwg.plates || dwg.plates.length === 0) {
-      return { found: dwg.foundCount || 0, total: (dwg.totalPlates || 0) * multiplier };
-    }
-    const total = dwg.plates.reduce((acc, p) => acc + (Number(p.qty) * multiplier), 0);
-    const found = dwg.plates.reduce((acc, p) => acc + (Number(p.foundCount) || 0), 0);
-    return { found, total };
-  };
-
-  const filteredDrawings = drawings.filter(dwg => {
-    const matchesSearch = dwg.drawingNumber?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          dwg.plates?.some(p => p.mark?.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesStatus = dwg.status === activeStatus;
-    return matchesSearch && matchesStatus;
-  });
-
-  const stats = {
-    total: drawings.length,
-    completed: drawings.filter(d => d.status === 'complete' || d.status === 'delivered').length
-  };
-
-  const handleRowClick = (dwg) => setExpandedId(expandedId === dwg._id ? null : dwg._id);
-  const handleRowDoubleClick = (dwg) => {
-    navigate(`/drawings/${dwg._id}`);
   };
 
   if (loading) return (
     <div className="flex flex-col items-center justify-center min-h-[400px]">
       <div className="w-12 h-12 border-4 border-sky-500/20 border-t-sky-500 rounded-full animate-spin mb-4"></div>
-      <p className="text-slate-500 font-black uppercase tracking-widest text-xs tracking-[0.3em]">Accessing Systems...</p>
+      <p className="text-slate-500 font-black uppercase tracking-widest text-xs tracking-[0.3em]">Syncing Drawing DB...</p>
     </div>
   );
 
   return (
-    <div className="w-full p-4 space-y-6 relative">
+    <div className="w-full p-4 space-y-6 relative selection:bg-sky-500/30">
       
-      {/* TOOLTIP WINDOW */}
+      {/* NOTIFICATION TOAST */}
       {notification && (
-        <div className={`fixed top-10 left-1/2 -translate-x-1/2 z-[999] flex items-center gap-4 px-6 py-4 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] border slide-in-from-top-10 duration-500 ${
-          notification.type === 'error' 
-          ? 'bg-red-950/90 border-red-500 text-red-100' 
-          : 'bg-slate-900/90 border-sky-500 text-sky-100'
+        <div className={`fixed top-10 left-1/2 -translate-x-1/2 z-[999] flex items-center gap-4 px-6 py-4 rounded-2xl shadow-2xl border animate-in fade-in slide-in-from-top-10 duration-500 ${
+          notification.type === 'error' ? 'bg-red-950/90 border-red-500 text-red-100' : 'bg-slate-900/90 border-sky-500 text-sky-100'
         }`}>
-          <div className={`w-3 h-3 rounded-full animate-pulse ${notification.type === 'error' ? 'bg-red-500' : 'bg-sky-500'}`} />
-          <span className="text-[11px] font-black uppercase tracking-[0.2em]">{notification.message}</span>
+          <div className={`w-2.5 h-2.5 rounded-full animate-pulse ${notification.type === 'error' ? 'bg-red-500' : 'bg-sky-500'}`} />
+          <span className="text-[10px] font-black uppercase tracking-[0.2em]">{notification.message}</span>
         </div>
       )}
 
       {/* HEADER */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 border-b border-slate-800 pb-6">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 border-b border-slate-800 pb-8">
         <div>
-          <h1 className="text-4xl font-black text-white italic tracking-tighter uppercase">Drawing Control</h1>
-          <div className="flex gap-4 mt-2">
-            <span className="text-[11px] font-black text-sky-500 uppercase tracking-widest">● {stats.total} Total</span>
-            <span className="text-[11px] font-black text-emerald-500 uppercase tracking-widest">● {stats.completed} Done</span>
+          <h1 className="text-5xl font-black text-white italic tracking-tighter uppercase leading-none">Control<span className="text-sky-500">.</span>Panel</h1>
+          <div className="flex gap-5 mt-4">
+            <div className="flex flex-col">
+                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Database Size</span>
+                <span className="text-lg font-mono font-bold text-white">{globalStats.total} DWG</span>
+            </div>
+            <div className="flex flex-col">
+                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Dispatch Ready</span>
+                <span className="text-lg font-mono font-bold text-emerald-500">{globalStats.completed} UNIT</span>
+            </div>
           </div>
         </div>
 
@@ -215,41 +190,39 @@ export default function Drawings() {
           <div className="relative flex-1 lg:flex-none">
             <input 
               type="text" 
-              placeholder="SEARCH DWG or MARK..." 
+              placeholder="FILTER BY MARK OR DWG..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full lg:w-64 bg-slate-800/50 border border-slate-700 rounded-xl py-3 px-10 text-white text-xs font-bold focus:border-sky-500 outline-none transition-all"
+              className="w-full lg:w-72 bg-slate-900/50 border border-slate-800 rounded-2xl py-4 px-12 text-white text-xs font-bold focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all placeholder:text-slate-600"
             />
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">🔍</span>
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 opacity-30">🔍</span>
           </div>
           <button 
             onClick={() => navigate('/drawings/add')} 
-            className="bg-sky-600 hover:bg-sky-500 text-white px-6 py-3 rounded-xl font-black uppercase text-xs tracking-widest active:scale-95 transition-all"
+            className="bg-sky-600 hover:bg-sky-500 text-white px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest active:scale-95 shadow-lg shadow-sky-900/20 transition-all"
           >
-            + New
+            + Register
           </button>
         </div>
       </div>
 
-      {/* STATUS TABS – now persistent */}
-      <div className="flex overflow-x-auto pb-6 gap-3 scrollbar-hide snap-x">
+      {/* STATUS WORKFLOW TABS */}
+      <div className="flex overflow-x-auto pb-4 gap-3 scrollbar-hide snap-x">
         {STATUS_WORKFLOW.map((status) => {
           const isActive = activeStatus === status;
-          const count = drawings.filter((d) => d.status === status).length;
+          const count = statusCounts[status] || 0;
           return (
             <button
               key={status}
               onClick={() => setActiveStatus(status)}
-              className={`flex items-center gap-4 px-5 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-wider transition-all duration-300 snap-start whitespace-nowrap border ${
+              className={`flex items-center gap-3 px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 snap-start whitespace-nowrap border-2 ${
                 isActive 
-                  ? 'bg-gradient-to-r from-sky-600 to-blue-600 border-sky-400 text-white shadow-[0_0_20px_rgba(2,132,199,0.3)] scale-[1.02]' 
-                  : 'bg-slate-900/40 border-slate-800 text-slate-400 hover:border-slate-600 hover:bg-slate-800/60'
+                  ? 'bg-sky-600 border-sky-400 text-white shadow-xl shadow-sky-900/40 translate-y-[-2px]' 
+                  : 'bg-slate-900/40 border-slate-800 text-slate-500 hover:border-slate-700 hover:text-slate-300'
               }`}
             >
               {status}
-              <span className={`flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full font-mono text-[10px] ${
-                isActive ? 'bg-white text-sky-700' : 'bg-slate-800 text-slate-300'
-              }`}>
+              <span className={`px-2 py-0.5 rounded-md font-mono ${isActive ? 'bg-white/20 text-white' : 'bg-slate-800 text-slate-500'}`}>
                 {count}
               </span>
             </button>
@@ -257,141 +230,112 @@ export default function Drawings() {
         })}
       </div>
 
-      {/* MOBILE LIST */}
-      <div className="grid grid-cols-1 gap-4 md:hidden">
-        {filteredDrawings.map((dwg) => {
-          const { found, total } = getCounts(dwg);
-          const isExpanded = expandedId === dwg._id;
-          const idx = STATUS_WORKFLOW.indexOf(dwg.status);
-          const nextStatus = STATUS_WORKFLOW[idx + 1];
-          const prevStatus = STATUS_WORKFLOW[idx - 1] || null;
+      {/* LISTING (MOBILE OPTIMIZED) */}
+      <div className="grid grid-cols-1 gap-4">
+        {filteredDrawings.length === 0 ? (
+            <div className="py-20 text-center border-2 border-dashed border-slate-800 rounded-3xl">
+                <p className="text-slate-600 font-black uppercase tracking-[0.3em] text-[10px]">No matches in {activeStatus} registry</p>
+            </div>
+        ) : (
+          filteredDrawings.map((dwg) => {
+            const { found, total } = getCounts(dwg);
+            const isExpanded = expandedId === dwg._id;
+            const progress = total > 0 ? (found / total) * 100 : 0;
+            const idx = STATUS_WORKFLOW.indexOf(dwg.status);
+            const nextStatus = STATUS_WORKFLOW[idx + 1];
+            const prevStatus = STATUS_WORKFLOW[idx - 1];
 
-          return (
-            <div 
-              key={dwg._id} 
-              className="bg-slate-800/40 border border-slate-700 rounded-2xl overflow-hidden shadow-lg"
-            >
-              <div 
-                className="p-5 cursor-pointer"
-                onClick={() => handleRowClick(dwg)}
-                onDoubleClick={() => handleRowDoubleClick(dwg)}
-              >
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-white font-black text-xl block tracking-tighter">
-                        {dwg.drawingNumber}
+            return (
+              <div key={dwg._id} className="bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden shadow-sm transition-all hover:border-slate-700">
+                <div 
+                  className="p-6 cursor-pointer"
+                  onClick={() => setExpandedId(isExpanded ? null : dwg._id)}
+                  onDoubleClick={() => navigate(`/drawings/${dwg._id}`)}
+                >
+                  <div className="flex justify-between items-start mb-6">
+                    <div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-white font-black text-2xl tracking-tighter uppercase">{dwg.drawingNumber}</span>
+                        {(dwg.serialNumber || activeStatus === 'waiting') && (
+                          <span className="bg-slate-950 text-sky-400 text-[10px] px-3 py-1 rounded-full border border-sky-500/30 font-mono font-black">
+                            SN-{dwg.serialNumber || 'PENDING'}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1 block">
+                        Dest: {dwg.deliverTo} <span className="mx-2 text-slate-800">|</span> Qty: {dwg.dwgQty} Sets
                       </span>
-                      {(dwg.serialNumber || activeStatus === 'waiting') && (
-                        <span className="bg-sky-500 text-white text-[10px] px-2 py-0.5 rounded font-mono font-black">
-                          SN: {dwg.serialNumber || '?'}
-                        </span>
-                      )}
                     </div>
-                    <span className="text-[11px] text-slate-500 font-bold uppercase tracking-widest">
-                      {dwg.deliverTo} • x{dwg.dwgQty} Sets
-                    </span>
-                    {activeStatus === 'new' && (
-                      <p className="text-[9px] text-sky-500/50 font-bold">
-                        Est SN: #{getNextAvailableSN()}
-                      </p>
+                    <div className="text-right">
+                        <div className="text-2xl font-mono font-black text-white">{found}<span className="text-slate-700 mx-1">/</span>{total}</div>
+                        <span className="text-[9px] font-black text-slate-600 uppercase">Items Processed</span>
+                    </div>
+                  </div>
+
+                  {/* PROGRESS UI */}
+                  <div className="space-y-2">
+                    <div className="relative w-full bg-slate-950 rounded-full h-2 p-0.5 border border-slate-800 overflow-hidden">
+                      <div 
+                        className={`h-full rounded-full transition-all duration-1000 ease-out ${progress >= 100 ? 'bg-emerald-500' : 'bg-sky-500'}`} 
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {isExpanded && (
+                  <div className="bg-slate-950/50 border-t border-slate-800 animate-in slide-in-from-top-2 duration-300">
+                    <div className="p-2 space-y-1">
+                      {dwg.plates?.map((p, i) => {
+                        const totalReq = (Number(p.qty) || 0) * (Number(dwg.dwgQty) || 1);
+                        const pfound = Number(p.foundCount) || 0;
+                        const pPerc = totalReq > 0 ? (pfound / totalReq) * 100 : 0;
+                        
+                        return (
+                          <div key={i} className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-800/30 transition-colors">
+                            <span className="text-[11px] font-black text-slate-300 font-mono w-24">{p.mark}</span>
+                            <div className="flex-1 px-4">
+                                <div className="w-full bg-slate-900 h-1 rounded-full overflow-hidden">
+                                    <div className="h-full bg-slate-700 transition-all duration-500" style={{ width: `${pPerc}%` }} />
+                                </div>
+                            </div>
+                            <span className="text-[11px] font-mono font-bold text-slate-500">{pfound} / {totalReq}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* WORKFLOW ACTIONS */}
+                <div className="p-4 bg-slate-950/20 border-t border-slate-800/50 flex gap-3">
+                  {activeStatus === 'new' && (
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const sn = prompt("Override/Assign Serial Number:", getNextAvailableSN());
+                        if (sn) updateStatus(null, dwg, "next", parseInt(sn));
+                      }} 
+                      className="px-4 py-3 bg-slate-800 text-slate-400 rounded-2xl text-[9px] font-black uppercase tracking-widest border border-slate-700 hover:text-white transition-all"
+                    >
+                      Assign SN
+                    </button>
+                  )}
+                  <div className="flex-1 flex gap-2">
+                    {prevStatus && (
+                        <button onClick={(e) => updateStatus(e, dwg, "prev")} className="flex-1 py-3 bg-slate-800/50 text-slate-500 rounded-2xl text-[9px] font-black uppercase border border-slate-800 hover:bg-slate-800 transition-all">← Back</button>
+                    )}
+                    {nextStatus && (
+                        <button onClick={(e) => updateStatus(e, dwg, "next")} className="flex-[2] py-3 bg-sky-600 text-white rounded-2xl text-[9px] font-black uppercase tracking-widest shadow-lg active:scale-[0.98] transition-all">
+                           Move to {nextStatus} →
+                        </button>
                     )}
                   </div>
-                  <div className="text-sky-400 font-mono font-black">{found}/{total}</div>
-                </div>
-
-                {/* Overall Progress Bar */}
-                <div className="space-y-1.5 w-full">
-                  <div className="flex justify-between items-end px-0.5">
-                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
-                      Overall Progress
-                    </span>
-                    <span className={`text-xs font-mono font-black ${found >= total ? 'text-emerald-400' : 'text-sky-400'}`}>
-                      {total > 0 ? Math.round((found / total) * 100) : 0}%
-                    </span>
-                  </div>
-                  <div className="relative w-full bg-slate-900 rounded-full h-2.5 p-0.5 border border-slate-800 shadow-inner">
-                    <div 
-                      className={`h-full rounded-full transition-all duration-700 ease-out relative ${found >= total ? 'bg-emerald-500' : 'bg-sky-500'}`} 
-                      style={{ width: `${total > 0 ? (found / total) * 100 : 0}%` }}
-                    />
-                  </div>
                 </div>
               </div>
-
-              {isExpanded && (
-                <div className="w-full border-t border-slate-700 bg-slate-950/40 slide-in-from-top-1 duration-200">
-                  <div className="w-full flex flex-col divide-y divide-slate-800/40">
-                    {dwg.plates?.map((p, i) => {
-                      const multiplier = Number(dwg.dwgQty) || 1;
-                      const totalRequired = (Number(p.qty) || 0) * multiplier;
-                      const pfound = Number(p.foundCount) || 0;
-                      const percentage = totalRequired > 0 ? (pfound / totalRequired) * 100 : 0;
-                      const dynamicColor = `hsl(${Math.min(percentage * 1.2, 120)}, 80%, 50%)`;
-
-                      return (
-                        <div key={i} className="w-full flex items-center gap-3 py-3 px-5">
-                          <div className="w-20 shrink-0">
-                            <span className="text-sky-400 font-black text-[11px] uppercase truncate block">
-                              {p.mark}
-                            </span>
-                          </div>
-                          <div className="flex-1 flex flex-col gap-1">
-                            <div className="w-full bg-slate-950 rounded-full h-1 overflow-hidden border border-slate-800/50">
-                              <div 
-                                className="h-full transition-all duration-700" 
-                                style={{ width: `${percentage}%`, backgroundColor: dynamicColor }} 
-                              />
-                            </div>
-                          </div>
-                          <div className="w-16 shrink-0 flex justify-end items-center gap-1 font-mono">
-                            <span style={{ color: dynamicColor }} className="text-[11px] font-black">
-                              {pfound}
-                            </span>
-                            <span className="text-slate-700 text-[9px]">/</span>
-                            <span className="text-slate-500 text-[11px] font-bold">
-                              {totalRequired}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              <div className="p-3 bg-slate-800/20 flex gap-2" onClick={e => e.stopPropagation()}>
-                {activeStatus === 'new' && (
-                  <button 
-                    onClick={() => {
-                      const sn = prompt("Enter Serial Number:", getNextAvailableSN());
-                      if (sn) updateStatus(null, dwg, "next", parseInt(sn));
-                    }} 
-                    className="flex-1 py-3 bg-amber-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest"
-                  >
-                    Manual SN
-                  </button>
-                )}
-                {prevStatus && (
-                  <button 
-                    onClick={(e) => updateStatus(e, dwg, "prev")} 
-                    className="flex-1 py-3 bg-slate-800 text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-widest border border-slate-700"
-                  >
-                    ←
-                  </button>
-                )}
-                {nextStatus && (
-                  <button 
-                    onClick={(e) => updateStatus(e, dwg, "next")} 
-                    className="flex-1 py-3 bg-sky-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg"
-                  >
-                    {nextStatus} →
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
     </div>
   );
