@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 
+import Keypad from './Keypad';
+
 const API_URL = 'http://localhost:3000';
 const API_PALLETS = `${API_URL}/pallets`;
 const API_DRAWINGS = `${API_URL}/drawings`;
@@ -36,6 +38,9 @@ export default function Pallets() {
   });
 
   const activeZ = 0;
+  
+  const [showKeypad, setShowKeypad] = useState(false);
+
 
   // 2. Data Fetching (useCallback to prevent redundant renders)
   const fetchPallets = useCallback(async () => {
@@ -79,6 +84,9 @@ export default function Pallets() {
       return () => clearTimeout(timer);
     }
   }, [message]);
+  
+  const [isEditingOrder, setIsEditingOrder] = useState(false);
+
 
   const currentPalletDoc = useMemo(() => 
     allPallets.find(p => p.x === activeCoord.x && p.y === activeCoord.y && p.z === activeZ),
@@ -88,6 +96,34 @@ export default function Pallets() {
   useEffect(() => {
     setOrderInput(currentPalletDoc?.orderNumber || '');
   }, [currentPalletDoc]);
+
+
+const clearAllPlates = async () => {
+  if (!currentPalletDoc?._id) return;
+  
+  // Custom type-to-confirm prompt
+  const userInput = window.prompt("Type '123' to DELETE ALL plates from this pallet:");
+  
+  if (userInput === '123') {
+    try {
+      const res = await fetch(`${API_PALLETS}/${currentPalletDoc._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plates: [] })
+      });
+      if (res.ok) {
+        showFeedback("Pallet Wiped Clean", "success");
+        fetchPallets();
+      }
+    } catch (error) {
+      showFeedback("Clear failed", "error");
+    }
+  } else if (userInput !== null) {
+    // If they typed something else, show an error
+    showFeedback("Incorrect code - Delete cancelled", "error");
+  }
+};
+
 
   // Command Parser Trigger
   useEffect(() => {
@@ -108,6 +144,24 @@ export default function Pallets() {
     const num = parseInt(value, 10);
     if (!isNaN(num)) setActiveCoord(prev => ({ ...prev, [axis]: num }));
   };
+  
+  // Inside Pallets component
+const [isMobileMode, setIsMobileMode] = useState(() => {
+  const saved = localStorage.getItem('keyboardMode');
+  return saved ? JSON.parse(saved) : false; // Default to Keypad mode
+});
+
+// Update localStorage when changed
+useEffect(() => {
+  localStorage.setItem('keyboardMode', JSON.stringify(isMobileMode));
+}, [isMobileMode]);
+
+// Toggle function
+const toggleKeyboard = () => {
+  setIsMobileMode(!isMobileMode);
+  setShowKeypad(isMobileMode); // If switching to keypad, show it
+};
+
 
   // 🔥 BUSINESS LOGIC: Plate Matching
   function matchPlatesWithDrawings(pallets, drawings) {
@@ -146,21 +200,31 @@ export default function Pallets() {
   }
 
   const parsePlateData = (input) => {
-    const str = input.toUpperCase();
-    const markMatch = str.match(/^[^LWTHOKADN]+/);
-    const mark = markMatch ? markMatch[0] : str.replace(/(ADD|OK|NEXT)$/, '');
-    const extract = (letter, def) => {
-      const match = str.match(new RegExp(`${letter}(\\d+)`));
-      return match ? match[1] : def;
-    };
-    return {
-      mark: mark.trim(),
-      length: Number(extract('L', 0)),
-      width: Number(extract('W', 0)),
-      thickness: Number(extract('T', 0)),
-      numberOfHoles: Number(extract('H', 0))
-    };
+  const str = input.toUpperCase().trim();
+  
+  // 1. Extract dimensions using regex
+  const extract = (letter) => {
+    const match = str.match(new RegExp(`${letter}(\\d+)`));
+    return match ? Number(match[1]) : 0;
   };
+
+  // 2. Identify the Mark (Plate Number)
+  // This removes segments like L100, W200, T10, H4 from the string 
+  // and treats whatever is left as the Mark.
+  const mark = str
+    .replace(/[LWTH]\d+/g, '') // Remove dimension pairs
+    .replace(/(ADD|OK|NEXT)$/, '') // Remove command keywords
+    .trim();
+
+  return {
+    mark,
+    length: extract('L'),
+    width: extract('W'),
+    thickness: extract('T'),
+    numberOfHoles: extract('H')
+  };
+};
+
 
   const updateOrderNumber = async () => {
     if (!currentPalletDoc?._id) {
@@ -184,36 +248,60 @@ export default function Pallets() {
   };
 
   const addPlate = async () => {
-    if (!inputValue) return;
-    const plateData = parsePlateData(inputValue);
-    const activePlates = currentPalletDoc?.plates || [];
+  const plateData = parsePlateData(inputValue);
+  const activePlates = currentPalletDoc?.plates || [];
 
-    if (activePlates.some(p => p.mark === plateData.mark)) {
-      showFeedback("Duplicate Plate", "error");
-      return;
+  // --- VALIDATION LOGIC ---
+
+  // 1. Prevent "Only Dimensions" (e.g., just entering W300)
+  if (!plateData.mark) {
+    showFeedback("Missing Plate Number (e.g., P1W300)", "error");
+    return;
+  }
+
+  // 2. Prevent short plate numbers (less than 2 digits/chars)
+  if (plateData.mark.length < 2) {
+    showFeedback("Plate Number must be at least 2 chars", "error");
+    return;
+  }
+
+  // 3. Prevent Duplicates
+  const isDuplicate = activePlates.some(
+    p => p.mark.toUpperCase() === plateData.mark.toUpperCase()
+  );
+  if (isDuplicate) {
+    showFeedback(`Plate ${plateData.mark} already exists here`, "error");
+    return;
+  }
+
+  // --- API CALL ---
+  setLoading(true);
+  try {
+    const method = currentPalletDoc ? 'PUT' : 'POST';
+    const url = currentPalletDoc ? `${API_PALLETS}/${currentPalletDoc._id}` : API_PALLETS;
+    const body = currentPalletDoc 
+      ? { plates: [...activePlates, plateData] }
+      : { x: activeCoord.x, y: activeCoord.y, z: activeZ, orderNumber: orderInput, plates: [plateData] };
+
+    const response = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    if (response.ok) {
+      showFeedback(`Added ${plateData.mark}`, "success");
+      setInputValue('');
+      fetchPallets();
     }
+  } catch { 
+    showFeedback("Save Error", "error"); 
+  } finally { 
+    setLoading(false); 
+  }
+};
 
-    setLoading(true);
-    try {
-      const method = currentPalletDoc ? 'PUT' : 'POST';
-      const url = currentPalletDoc ? `${API_PALLETS}/${currentPalletDoc._id}` : API_PALLETS;
-      const body = currentPalletDoc 
-        ? { plates: [...activePlates, plateData] }
-        : { x: activeCoord.x, y: activeCoord.y, z: activeZ, orderNumber: '', plates: [plateData] };
 
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-
-      if (response.ok) {
-        showFeedback(`Added ${plateData.mark}`, "success");
-        setInputValue('');
-        fetchPallets();
-      }
-    } catch { showFeedback("Save Error", "error"); } finally { setLoading(false); }
-  };
 
   const removePlate = async (plateMark) => {
     const updated = currentPalletDoc.plates.filter(p => p.mark !== plateMark);
@@ -260,19 +348,61 @@ export default function Pallets() {
         )}
 
         {/* ORDER NUMBER BAR */}
-        <div className="bg-slate-900/60 rounded-xl border border-slate-800 p-3 flex items-center gap-3">
-          <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-2">Order No.</span>
-          <input
-            className="flex-1 bg-slate-950 border border-slate-800 text-slate-200 text-sm font-mono font-bold rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-500/50 uppercase"
-            placeholder="NO ORDER ASSIGNED"
-            value={orderInput}
-            onChange={(e) => setOrderInput(e.target.value)}
-            onBlur={updateOrderNumber}
-          />
-          <button onClick={updateOrderNumber} className="p-2 bg-slate-800 hover:bg-emerald-600 text-slate-400 hover:text-white rounded-lg transition-colors border border-slate-700">
-            <Icons.Save />
+{/* ORDER NUMBER BAR (Minimalist - Bigger Input) */}
+<div className="flex items-center justify-between px-2 mb-1">
+  <div className="flex items-center gap-2 group">
+    {/* Label & Status */}
+    <div className="flex flex-col">
+      <span className="text-[9px] font-black text-slate-600 uppercase tracking-[0.2em] leading-none">Order</span>
+      {!isEditingOrder ? (
+        <div className="flex items-center gap-2 mt-1">
+          <span className="text-sm font-mono font-bold text-slate-300">
+            {currentPalletDoc?.orderNumber || "---"}
+          </span>
+          <button 
+            onClick={() => setIsEditingOrder(true)}
+            className="p-1 text-slate-600 hover:text-sky-500 transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+            </svg>
           </button>
         </div>
+      ) : (
+        <div className="flex items-center gap-2 mt-1 animate-in fade-in slide-in-from-left-2 duration-200">
+          <input
+            autoFocus
+            /* ⚡ BIGGER INPUT: increased text size (text-lg), padding (px-3 py-2), and width (w-48) */
+            className="bg-slate-900 border-2 border-sky-500/50 text-sky-400 text-lg font-mono font-bold rounded-lg px-3 py-2 w-48 focus:outline-none uppercase shadow-lg shadow-sky-500/10"
+            value={orderInput}
+            onChange={(e) => setOrderInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && (updateOrderNumber(), setIsEditingOrder(false))}
+            onBlur={() => {
+              updateOrderNumber();
+              setIsEditingOrder(false);
+            }}
+          />
+          <button 
+            onMouseDown={(e) => e.preventDefault()} // Prevents blur before click
+            onClick={() => setIsEditingOrder(false)} 
+            className="text-[10px] font-bold text-slate-500 hover:text-red-400 uppercase ml-1"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+    </div>
+  </div>
+
+  {/* Active Location Badge */}
+  <div className="flex flex-col items-end">
+    <span className="text-[9px] font-black text-slate-600 uppercase tracking-[0.2em] leading-none">Location</span>
+    <span className="text-sm font-mono font-bold text-sky-500/80 mt-1">
+      {activeCoord.x}.{activeCoord.y}
+    </span>
+  </div>
+</div>
+
 
         {/* COORDINATE CONTROLS */}
         <div className="bg-slate-900/40 p-3 rounded-2xl border border-slate-800/50 backdrop-blur-sm">
@@ -291,32 +421,87 @@ export default function Pallets() {
         </div>
 
         {/* COMMAND BAR */}
-        <div className="sticky top-4 z-40">
-          <div className="flex gap-2 p-2 bg-slate-900 rounded-2xl border-2 border-slate-800 shadow-2xl">
-            <input
-              type="text"
-              placeholder="MARK L1000 W500 T10 ADD"
-              className="flex-1 bg-transparent px-4 py-3 outline-none font-mono text-lg text-sky-400 uppercase placeholder:text-slate-700"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && addPlate()}
-            />
-            <button
-              onClick={addPlate}
-              disabled={loading || !inputValue}
-              className="px-8 py-3 rounded-xl font-black text-sm bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white transition-all"
-            >
-              {loading ? '...' : 'ADD'}
-            </button>
-          </div>
-        </div>
+{/* COMMAND BAR */}
+{/* COMMAND BAR */}
+<div className="sticky top-4 z-40 w-full space-y-2">
+  <div className="relative flex items-center gap-2 p-1.5 pl-4 bg-slate-900 rounded-2xl border-2 border-slate-800 overflow-hidden">
+    
+    {/* Mode Toggle "Edge" Button */}
+    <button 
+      onClick={toggleKeyboard}
+      className={`absolute left-0 top-0 bottom-0 w-2.5 transition-all duration-300 ${
+        isMobileMode 
+          ? 'bg-amber-900/50' 
+          : 'bg-sky-900/50'
+      }`}
+      title={isMobileMode ? "Switch to Keypad" : "Switch to System Keyboard"}
+    />
+
+    <input
+      type="text"
+      inputMode={isMobileMode ? "text" : "none"} 
+      onFocus={() => !isMobileMode && setShowKeypad(true)}
+      placeholder={isMobileMode ? "MOBILE MODE" : "KEYPAD MODE"}
+      className="flex-1 min-w-0 bg-transparent px-2 py-2 outline-none font-mono text-base md:text-lg text-sky-400 uppercase placeholder:text-slate-700"
+      value={inputValue}
+      onChange={(e) => setInputValue(e.target.value.replace(/\s/g, '').toUpperCase())}
+      onKeyDown={(e) => e.key === 'Enter' && addPlate()}
+    />
+    
+    <button
+      onClick={addPlate}
+      disabled={loading || !inputValue}
+      className="shrink-0 px-4 py-2.5 rounded-xl font-black text-sm bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white transition-all"
+    >
+      {loading ? '...' : 'ADD'}
+    </button>
+  </div>
+</div>
+
+
+{/* Conditional Keypad Rendering */}
+{/* Custom Keypad Overlay */}
+{!isMobileMode && showKeypad && (
+  <>
+    {/* Updated Backdrop: 
+       - Removed 'bg-black/20' 
+       - Keep 'fixed inset-0' to catch clicks outside
+    */}
+    <div 
+      className="fixed inset-0 z-40 bg-transparent" 
+      onClick={() => setShowKeypad(false)} 
+    />
+    
+    {/* The Keypad itself stays on top (z-50) */}
+    <div className="fixed bottom-0 left-0 right-0 z-50">
+      <Keypad 
+        value={inputValue} 
+        onChange={(val) => setInputValue(val.toUpperCase())} 
+        onClose={() => setShowKeypad(false)} 
+        onAdd={addPlate}
+      />
+    </div>
+  </>
+)}
+
 
         {/* ACTIVE LIST */}
-        <div className="bg-slate-900 rounded-3xl border border-slate-800 overflow-hidden shadow-xl">
-          <div className="px-6 py-4 bg-slate-800/50 border-b border-slate-800 flex justify-between items-center">
-            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Active Inventory</h3>
-            <span className="px-2 py-1 bg-slate-900 rounded text-[10px] text-sky-500 font-mono">LOC: {activeCoord.x}.{activeCoord.y}</span>
-          </div>
+<div className="bg-slate-900 rounded-3xl border border-slate-800 overflow-hidden shadow-xl">
+  <div className="px-6 py-4 bg-slate-800/50 border-b border-slate-800 flex justify-between items-center">
+    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Active Inventory</h3>
+    
+    {/* CLEAR ALL BUTTON (Icon Only) */}
+    <button 
+      onClick={clearAllPlates}
+      disabled={!currentPalletDoc?.plates?.length}
+      className="p-1.5 rounded-xl bg-red-800/10 text-red-800 hover:bg-red-800 hover:text-white disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-red-500 transition-all border border-red-700/20"
+      title="Clear all plates"
+    >
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+      </svg>
+    </button>
+  </div>
           <div className="divide-y divide-slate-800/50">
             {filteredActivePlates.length > 0 ? (
               filteredActivePlates.map((plate) => (
@@ -391,11 +576,19 @@ const PlateRow = ({ plate, onRemove, allPallets = [], activeCoord, setActiveCoor
             ))}
           </div>
         </div>
-        {onRemove && (
-          <button onDoubleClick={() => onRemove(plate.mark)} className="p-3 rounded-lg bg-red-500/10 text-red-200 opacity-0 group-hover:opacity-100 hover:bg-red-600 hover:text-white transition-all">
-            <Icons.Trash />
-          </button>
-        )}
+{onRemove && (
+  <button 
+    /* Changed from onDoubleClick to onClick for responsiveness */
+    onClick={() => {
+      if(window.confirm('Delete this plate?')) onRemove(plate.mark)
+    }} 
+    /* Removed opacity-0 so it's visible on mobile; added shrink-0 */
+    className="shrink-0 p-3 rounded-xl bg-red-500/10 text-red-800 hover:bg-red-600 hover:text-white transition-all ml-4"
+  >
+    <Icons.Trash className="w-5 h-5" /> 
+  </button>
+)}
+
       </div>
 
       {otherLocations.length > 0 && (
