@@ -167,14 +167,14 @@ const Database = () => {
             className="flex-1 overflow-y-auto p-4 space-y-4 pb-20 custom-scrollbar"
           >
             {paginatedRecords.map((row, i) => (
-              <div key={row._id || i} className="bg-white/[0.02] border border-white/5 rounded-2xl p-4 shadow-inner">
+              <div key={row.id || i} className="bg-white/[0.02] border border-white/5 rounded-2xl p-4 shadow-inner">
                 <div className="flex justify-between items-center mb-4 border-b border-white/5 pb-2">
                   <span className="text-[9px] font-black text-blue-500 uppercase tracking-[0.2em]">Record #{i + 1}</span>
-                  <span className="text-[9px] font-mono text-slate-600">ID: {row._id || '---'}</span>
+                  <span className="text-[9px] font-mono text-slate-600">ID: {row.id || '---'}</span>
                 </div>
                 
                 <div className="space-y-1">
-                  {Object.entries(row).filter(([k]) => k !== '_id').map(([key, value]) => (
+                  {Object.entries(row).filter(([k]) => k !== 'id').map(([key, value]) => (
                     <DataNode key={key} label={key} value={value} depth={1} />
                   ))}
                 </div>

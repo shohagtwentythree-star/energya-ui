@@ -75,7 +75,7 @@ export default function CartBridge() {
         const matchedPlate = d.plates.find((p) => p.mark === itemMark);
         return {
           ...d,
-          drawingId: d._id,
+          drawingId: d.id,
           requiredQty: (Number(matchedPlate?.qty) || 0) * (Number(d.dwgQty) || 1),
           foundCount: Number(matchedPlate?.foundCount) || 0,
         };
@@ -110,9 +110,9 @@ export default function CartBridge() {
       ? { ...existing, quantity: existing.quantity + qty }
       : { ...plate, coord: coordKey, quantity: qty };
 
-    const url = existing ? `${CART_API}/${existing._id}` : CART_API;
+    const url = existing ? `${CART_API}/${existing.id}` : CART_API;
     const method = existing ? "PUT" : "POST";
-    if (!existing) delete body._id;
+    if (!existing) delete body.id;
 
     await fetch(url, {
       method,
@@ -123,7 +123,7 @@ export default function CartBridge() {
   };
 
   const putToDrawing = async (cartItem, drawingId, qty) => {
-    const drawing = drawings.find((d) => d._id === drawingId);
+    const drawing = drawings.find((d) => d.id === drawingId);
     if (!drawing) return;
 
     const updatedPlates = drawing.plates.map((p) => 
@@ -139,8 +139,8 @@ export default function CartBridge() {
 
     const remainingInCart = cartItem.quantity - qty;
     const cartRequest = remainingInCart <= 0 
-        ? fetch(`${CART_API}/${cartItem._id}`, { method: "DELETE" })
-        : fetch(`${CART_API}/${cartItem._id}`, {
+        ? fetch(`${CART_API}/${cartItem.id}`, { method: "DELETE" })
+        : fetch(`${CART_API}/${cartItem.id}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ ...cartItem, quantity: remainingInCart }),

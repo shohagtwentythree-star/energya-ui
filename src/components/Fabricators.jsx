@@ -236,7 +236,7 @@ function TeamDetailView({ team, onBack }) {
                {jobs.map((job, i) => (
                  <div key={i} className="bg-slate-950 p-6 border border-slate-800 group hover:border-sky-700 transition-all flex justify-between items-center shadow-inner">
                    <div>
-                      <span className="text-[10px] text-slate-600 font-black block mb-1">TASK_ID</span>
+                      <span className="text-[10px] text-slate-600 font-black block mb-1">TASKid</span>
                       <span className="text-white font-black font-mono text-lg">{job}</span>
                    </div>
                    <div className="h-2 w-2 rounded-full bg-sky-500"></div>

@@ -24,7 +24,7 @@ const CartDrawingsView = ({
       ) : (
         sortedDrawings.map((dwg) => (
           <DrawingCard 
-            key={dwg._id}
+            key={dwg.id}
             dwg={dwg}
             cart={cart}
             putToDrawing={putToDrawing}
@@ -79,9 +79,9 @@ const DrawingCard = memo(({ dwg, cart, putToDrawing, jumpToMark, isPlateInAnyPal
       <div className="p-2 space-y-1">
         {plates.map((plate, index) => (
           <PlateRow 
-            key={`${dwg._id}-p-${index}`}
+            key={`${dwg.id}-p-${index}`}
             plate={plate}
-            dwgId={dwg._id}
+            dwgId={dwg.id}
             multiplier={multiplier}
             cart={cart}
             putToDrawing={putToDrawing}

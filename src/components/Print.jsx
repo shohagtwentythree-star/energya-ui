@@ -53,7 +53,7 @@ export default function Print() {
       <div className="space-y-8">
         {filteredDrawings.map((dwg) => (
           <div 
-            key={dwg._id} 
+            key={dwg.id} 
             className="bg-white text-black p-8 rounded-sm shadow-sm border border-slate-200 print:border-none print:shadow-none print:p-0 page-break-after-always"
           >
             {/* Header Section */}

@@ -256,12 +256,12 @@ const BackupManager = () => {
             className="flex-1 overflow-y-auto p-4 space-y-4 pb-20 custom-scrollbar"
           >
             {paginatedRecords.map((row, i) => (
-              <div key={row._id || i} className="bg-white/[0.02] border border-white/5 rounded-xl p-3 shadow-sm">
+              <div key={row.id || i} className="bg-white/[0.02] border border-white/5 rounded-xl p-3 shadow-sm">
                 <div className="flex justify-between items-center mb-2 opacity-30">
                     <span className="text-[8px] font-black text-white uppercase">REC_{i+1}</span>
-                    <span className="text-[8px] font-mono text-white">{row._id || 'NO_ID'}</span>
+                    <span className="text-[8px] font-mono text-white">{row.id || 'NOid'}</span>
                 </div>
-                {Object.entries(row).filter(([k]) => k !== '_id').map(([k, v]) => (
+                {Object.entries(row).filter(([k]) => k !== 'id').map(([k, v]) => (
                   <DataNode key={k} label={k} value={v} />
                 ))}
               </div>

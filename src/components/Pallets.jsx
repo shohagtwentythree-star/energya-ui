@@ -99,14 +99,14 @@ export default function Pallets() {
 
 
 const clearAllPlates = async () => {
-  if (!currentPalletDoc?._id) return;
+  if (!currentPalletDoc?.id) return;
   
   // Custom type-to-confirm prompt
   const userInput = window.prompt("Type '123' to DELETE ALL plates from this pallet:");
   
   if (userInput === '123') {
     try {
-      const res = await fetch(`${API_PALLETS}/${currentPalletDoc._id}`, {
+      const res = await fetch(`${API_PALLETS}/${currentPalletDoc.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plates: [] })
@@ -174,7 +174,7 @@ const toggleKeyboard = () => {
         const mark = normalize(plate.mark);
         if (!plateLookup[mark]) plateLookup[mark] = [];
         plateLookup[mark].push({
-          _id: drawing._id,
+          id: drawing.id,
           drawingNumber: drawing.drawingNumber,
           requiredQuantity: Number(plate.qty || 0) * Number(drawing.dwgQty || 0),
           length: Number(plate.l || 0),
@@ -227,7 +227,7 @@ const toggleKeyboard = () => {
 
 
   const updateOrderNumber = async () => {
-    if (!currentPalletDoc?._id) {
+    if (!currentPalletDoc?.id) {
       if (orderInput.trim()) showFeedback("Add at least one plate first", "error");
       return;
     }
@@ -235,7 +235,7 @@ const toggleKeyboard = () => {
     if (cleanOrder === currentPalletDoc.orderNumber) return;
 
     try {
-      const res = await fetch(`${API_PALLETS}/${currentPalletDoc._id}`, {
+      const res = await fetch(`${API_PALLETS}/${currentPalletDoc.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orderNumber: cleanOrder })
@@ -271,8 +271,8 @@ const toggleKeyboard = () => {
   const currentMark = plateData.mark.toUpperCase();
 
   try {
-    const isExisting = !!currentPalletDoc?._id;
-    const url = isExisting ? `${API_PALLETS}/${currentPalletDoc._id}` : API_PALLETS;
+    const isExisting = !!currentPalletDoc?.id;
+    const url = isExisting ? `${API_PALLETS}/${currentPalletDoc.id}` : API_PALLETS;
     const method = isExisting ? 'PUT' : 'POST';
 
     const body = isExisting 
@@ -316,7 +316,7 @@ const toggleKeyboard = () => {
   const removePlate = async (plateMark) => {
     const updated = currentPalletDoc.plates.filter(p => p.mark !== plateMark);
     try {
-      await fetch(`${API_PALLETS}/${currentPalletDoc._id}`, {
+      await fetch(`${API_PALLETS}/${currentPalletDoc.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plates: updated })
@@ -660,7 +660,7 @@ const PlateRow = ({ plate, onRemove, allPallets = [], activeCoord, setActiveCoor
       {plate.drawings?.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
           {plate.drawings.map((d, i) => (
-            <Link key={i} to={`/drawings/${d._id}`} className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded text-[10px] hover:bg-emerald-500/20 transition-all group/dwg">
+            <Link key={i} to={`/drawings/${d.id}`} className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded text-[10px] hover:bg-emerald-500/20 transition-all group/dwg">
               <span className="text-slate-400 font-mono"># {d.drawingNumber}</span>
               <span className="text-emerald-400 font-bold italic">Qty {d.requiredQuantity}</span>
               <Icons.ArrowRight />

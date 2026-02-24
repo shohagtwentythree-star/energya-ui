@@ -136,7 +136,7 @@ export default function Profile({ user, onLogout }) {
              </div>
           ) : (
             logs.map((log) => (
-              <div key={log._id || Math.random()} className="bg-[#242526] rounded-xl shadow-lg border border-[#3e4042] overflow-hidden">
+              <div key={log.id || Math.random()} className="bg-[#242526] rounded-xl shadow-lg border border-[#3e4042] overflow-hidden">
                 <div className="p-4 flex items-center justify-between">
                   <div className="flex gap-3">
                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-white font-black ${

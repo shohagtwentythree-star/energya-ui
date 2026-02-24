@@ -9,25 +9,25 @@ const AdminPanel = () => {
   // Standard Configuration Template
   const DEFAULT_CONFIG = [
     { 
-      _id: "sys_network", 
+      id: "sys_network", 
       key: "API_ENDPOINT", 
       value: "http://localhost:3000", 
       description: "Primary backend gateway" 
     },
     { 
-      _id: "sys_safety", 
+      id: "sys_safety", 
       key: "MAINTENANCE_MODE", 
       value: "OFF", 
       description: "Global system lock (ON/OFF)" 
     },
     { 
-      _id: "sys_storage", 
+      id: "sys_storage", 
       key: "BACKUP_RETENTION_DAYS", 
       value: "30", 
       description: "Auto-purge age for snapshots" 
     },
     { 
-      _id: "sys_ui", 
+      id: "sys_ui", 
       key: "THEME_ACCENT", 
       value: "#0ea5e9", 
       description: "Primary UI color hex" 
@@ -100,8 +100,8 @@ const AdminPanel = () => {
 
   const addNewItem = () => {
     const newItem = activeTab === 'users' 
-      ? { _id: `user_${Date.now()}`, username: "new_user", role: "admin", password: "" }
-      : { _id: `cfg_${Date.now()}`, key: "NEW_KEY", value: "VALUE", description: "" };
+      ? { id: `user_${Date.now()}`, username: "new_user", role: "admin", password: "" }
+      : { id: `cfg_${Date.now()}`, key: "NEW_KEY", value: "VALUE", description: "" };
     setData([newItem, ...data]);
   };
 
@@ -140,14 +140,14 @@ const AdminPanel = () => {
       {/* DATA CARDS */}
       <div className="space-y-4">
         {data.map((item, i) => (
-          <div key={item._id || i} className="bg-slate-900 border border-white/5 p-4 rounded-xl relative">
+          <div key={item.id || i} className="bg-slate-900 border border-white/5 p-4 rounded-xl relative">
             <div className="flex justify-between items-center mb-4 border-b border-white/5 pb-2">
-              <span className="text-[8px] font-mono text-slate-600 uppercase">ID: {item._id}</span>
+              <span className="text-[8px] font-mono text-slate-600 uppercase">ID: {item.id}</span>
               <button onClick={() => deleteEntry(i)} className="text-rose-500 text-[10px] font-bold">REMOVE</button>
             </div>
             
             <div className="space-y-4">
-              {Object.entries(item).filter(([k]) => k !== '_id' && k !== 'type').map(([key, value]) => (
+              {Object.entries(item).filter(([k]) => k !== 'id' && k !== 'type').map(([key, value]) => (
                 <div key={key}>
                   <label className="text-[7px] text-slate-500 font-bold uppercase block mb-1 tracking-widest">{key}</label>
                   <input 

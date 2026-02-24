@@ -19,7 +19,7 @@ const CartCartView = ({
         // Sort cart by mark name for a stable, predictable UI list
         [...cart].sort((a, b) => a.mark.localeCompare(b.mark)).map((item) => (
           <CartItem 
-            key={item._id || item.mark} // Fallback key for safety
+            key={item.id || item.mark} // Fallback key for safety
             item={item}
             matched={getMatchedDrawings ? getMatchedDrawings(item.mark) : []}
             removeFromCart={removeFromCart}
@@ -63,7 +63,7 @@ const CartItem = memo(({ item, matched, removeFromCart, putToDrawing }) => {
           </div>
           <button 
             type="button"
-            onDoubleClick={() => removeFromCart && removeFromCart(item._id)} 
+            onDoubleClick={() => removeFromCart && removeFromCart(item.id)} 
             className="text-slate-600 hover:text-red-500 transition-colors p-1 active:scale-90"
             title="Double tap to bin"
           >

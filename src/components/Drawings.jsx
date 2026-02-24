@@ -133,11 +133,11 @@ export default function Drawings() {
 
     const oldDrawings = [...drawings];
     setDrawings(prev => prev.map(d => 
-      d._id === dwg._id ? { ...d, status: newStatus, serialNumber: assignedSN } : d
+      d.id === dwg.id ? { ...d, status: newStatus, serialNumber: assignedSN } : d
     ));
 
     try {
-      const response = await fetch(API_URL + dwg._id, {
+      const response = await fetch(API_URL + dwg.id, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus, serialNumber: assignedSN })
@@ -239,18 +239,18 @@ export default function Drawings() {
         ) : (
           filteredDrawings.map((dwg) => {
             const { found, total } = getCounts(dwg);
-            const isExpanded = expandedId === dwg._id;
+            const isExpanded = expandedId === dwg.id;
             const progress = total > 0 ? (found / total) * 100 : 0;
             const idx = STATUS_WORKFLOW.indexOf(dwg.status);
             const nextStatus = STATUS_WORKFLOW[idx + 1];
             const prevStatus = STATUS_WORKFLOW[idx - 1];
 
             return (
-              <div key={dwg._id} className="bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden shadow-sm transition-all hover:border-slate-700">
+              <div key={dwg.id} className="bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden shadow-sm transition-all hover:border-slate-700">
                 <div 
                   className="p-6 cursor-pointer"
-                  onClick={() => setExpandedId(isExpanded ? null : dwg._id)}
-                  onDoubleClick={() => navigate(`/drawings/${dwg._id}`)}
+                  onClick={() => setExpandedId(isExpanded ? null : dwg.id)}
+                  onDoubleClick={() => navigate(`/drawings/${dwg.id}`)}
                 >
                   <div className="flex justify-between items-start mb-6">
                     <div>
