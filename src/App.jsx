@@ -15,7 +15,7 @@ import AddDrawingView from './components/AddDrawingView';
 import DetailDrawingView from './components/DetailDrawingView'; 
 import Database from './components/Database'; 
 import BackupManager from './components/BackupManager'; // Import the new file
-
+import RestoreManager from './components/RestoreManager'; // Import the new file
 
 const navItems = [
   {
@@ -207,6 +207,7 @@ export default function App() {
               <Routes>
                 <Route path="/cart" element={<Cart />} />
                 <Route path="/backup" element={<BackupManager />} />
+                <Route path="/restore" element={<RestoreManager />} />
                 <Route path="/pallets" element={<Pallets />} />
              <Route path="/drawings" element={<Drawings />} />
 <Route path="/drawings/add" element={<AddDrawingView />} />

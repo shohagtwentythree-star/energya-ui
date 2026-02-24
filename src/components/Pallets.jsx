@@ -251,38 +251,47 @@ const toggleKeyboard = () => {
   const plateData = parsePlateData(inputValue);
   const activePlates = currentPalletDoc?.plates || [];
 
-  // --- VALIDATION LOGIC ---
-
-  // 1. Prevent "Only Dimensions" (e.g., just entering W300)
+  // --- 1. VALIDATION ---
   if (!plateData.mark) {
-    showFeedback("Missing Plate Number (e.g., P1W300)", "error");
+    showFeedback("Missing Plate Number", "error");
     return;
   }
 
-  // 2. Prevent short plate numbers (less than 2 digits/chars)
-  if (plateData.mark.length < 2) {
-    showFeedback("Plate Number must be at least 2 chars", "error");
-    return;
-  }
-
-  // 3. Prevent Duplicates
   const isDuplicate = activePlates.some(
     p => p.mark.toUpperCase() === plateData.mark.toUpperCase()
   );
   if (isDuplicate) {
-    showFeedback(`Plate ${plateData.mark} already exists here`, "error");
+    showFeedback(`Plate ${plateData.mark} already exists`, "error");
     return;
   }
 
-  // --- API CALL ---
+  // --- 2. PREPARE ROBUST DATA ---
   setLoading(true);
-  try {
-    const method = currentPalletDoc ? 'PUT' : 'POST';
-    const url = currentPalletDoc ? `${API_PALLETS}/${currentPalletDoc._id}` : API_PALLETS;
-    const body = currentPalletDoc 
-      ? { plates: [...activePlates, plateData] }
-      : { x: activeCoord.x, y: activeCoord.y, z: activeZ, orderNumber: orderInput, plates: [plateData] };
+  const timestamp = new Date().toISOString();
+  const currentMark = plateData.mark.toUpperCase();
 
+  try {
+    const isExisting = !!currentPalletDoc?._id;
+    const url = isExisting ? `${API_PALLETS}/${currentPalletDoc._id}` : API_PALLETS;
+    const method = isExisting ? 'PUT' : 'POST';
+
+    const body = isExisting 
+      ? { 
+          plates: [...activePlates, plateData],
+          lastActivity: timestamp,
+          lastPlateMark: currentMark // 👈 Store the mark name
+        }
+      : { 
+          x: Number(activeCoord.x), 
+          y: Number(activeCoord.y), 
+          z: activeZ, 
+          orderNumber: orderInput || "UNASSIGNED", 
+          plates: [plateData],
+          lastActivity: timestamp,
+          lastPlateMark: currentMark
+        };
+
+    // --- 3. API CALL ---
     const response = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
@@ -290,16 +299,17 @@ const toggleKeyboard = () => {
     });
 
     if (response.ok) {
-      showFeedback(`Added ${plateData.mark}`, "success");
+      showFeedback(`Added ${currentMark}`, "success");
       setInputValue('');
       fetchPallets();
     }
-  } catch { 
+  } catch (err) { 
     showFeedback("Save Error", "error"); 
   } finally { 
     setLoading(false); 
   }
 };
+
 
 
 
@@ -486,15 +496,42 @@ const toggleKeyboard = () => {
 
 
         {/* ACTIVE LIST */}
+{/* ACTIVE LIST */}
 <div className="bg-slate-900 rounded-3xl border border-slate-800 overflow-hidden shadow-xl">
+  {/* HEADER SECTION */}
   <div className="px-6 py-4 bg-slate-800/50 border-b border-slate-800 flex justify-between items-center">
-    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Active Inventory</h3>
+    <div className="flex flex-col">
+      <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest leading-tight">
+        Active Inventory
+      </h3>
+      
+      {/* 🕒 ENHANCED STATUS DISPLAY */}
+      {currentPalletDoc?.lastActivity && (
+        <div className="flex items-center gap-2 mt-1.5 animate-in fade-in slide-in-from-left-2 duration-300">
+          <div className="flex items-center gap-1.5 px-2 py-0.5 bg-sky-500/10 border border-sky-500/20 rounded-md">
+            <span className="text-[9px] font-bold text-sky-600 uppercase tracking-tighter">Last Added</span>
+            <span className="text-[11px] font-mono font-black text-sky-400 uppercase">
+              {currentPalletDoc.lastPlateMark || "---"}
+            </span>
+          </div>
+<span className="text-[10px] font-mono text-slate-500 font-bold italic">
+  @ {new Date(currentPalletDoc.lastActivity).toLocaleString('en-GB', { 
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit', 
+      minute: '2-digit' 
+    })}
+</span>
+
+        </div>
+      )}
+    </div>
     
-    {/* CLEAR ALL BUTTON (Icon Only) */}
+    {/* CLEAR ALL BUTTON */}
     <button 
       onClick={clearAllPlates}
       disabled={!currentPalletDoc?.plates?.length}
-      className="p-1.5 rounded-xl bg-red-800/10 text-red-800 hover:bg-red-800 hover:text-white disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-red-500 transition-all border border-red-700/20"
+      className="p-1.5 rounded-xl bg-red-800/10 text-red-800 hover:bg-red-600 hover:text-white disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-red-800 transition-all border border-red-700/20"
       title="Clear all plates"
     >
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -502,27 +539,41 @@ const toggleKeyboard = () => {
       </svg>
     </button>
   </div>
-          <div className="divide-y divide-slate-800/50">
-            {filteredActivePlates.length > 0 ? (
-              filteredActivePlates.map((plate) => (
-                <PlateRow 
-                  key={plate.mark} 
-                  plate={plate} 
-                  onRemove={removePlate} 
-                  allPallets={allPallets}
-                  activeCoord={activeCoord}
-                  setActiveCoord={setActiveCoord}
-                  setSearchParams={setSearchParams}
-                />
-              ))
-            ) : (
-              <div className="py-20 text-center">
-                <div className="text-slate-700 font-black text-4xl mb-2">EMPTY</div>
-                <p className="text-slate-500 text-xs uppercase tracking-widest font-bold">No plates at this location</p>
-              </div>
-            )}
-          </div>
-        </div>
+
+  {/* LIST SECTION */}
+  <div className="divide-y divide-slate-800/50">
+    {filteredActivePlates.length > 0 ? (
+      filteredActivePlates.map((plate) => (
+        <PlateRow 
+          key={plate.mark} 
+          plate={plate} 
+          onRemove={removePlate} 
+          allPallets={allPallets}
+          activeCoord={activeCoord}
+          setActiveCoord={setActiveCoord}
+          setSearchParams={setSearchParams}
+        />
+      ))
+    ) : (
+      <div className="py-20 text-center">
+        <div className="text-slate-800 font-black text-4xl mb-2 tracking-tighter">EMPTY</div>
+        <p className="text-slate-600 text-[10px] uppercase tracking-[0.3em] font-bold">
+          No plates at this location
+        </p>
+      </div>
+    )}
+  </div>
+
+  {/* FOOTER STATS (Optional extra touch) */}
+  {filteredActivePlates.length > 0 && (
+    <div className="px-6 py-2 bg-slate-950/30 border-t border-slate-800/50 flex justify-end">
+      <span className="text-[9px] font-bold text-slate-600 uppercase tracking-widest">
+        Total Items: {filteredActivePlates.length}
+      </span>
+    </div>
+  )}
+</div>
+
 
         {/* GLOBAL MATCHES */}
         {globalMatches.length > 0 && (
