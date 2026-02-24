@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
-
 // Component Imports
 import Fabricators from './components/Fabricators';
 import Pallets from './components/Pallets';
