@@ -10,6 +10,8 @@ import Cart from './components/Cart';
 import Print from './components/Print';
 import Register from './components/Register';
 import Profile from './components/Profile';
+import Admin from './components/Admin';
+import FactoryReset from './components/FactoryReset';
 import Login from './components/Login'; 
 import AddDrawingView from './components/AddDrawingView'; 
 import DetailDrawingView from './components/DetailDrawingView'; 
@@ -214,6 +216,8 @@ export default function App() {
 <Route path="/drawings/:id" element={<DetailDrawingView />} />
                                 <Route path="/database" element={<Database />} />
                 <Route path="/print" element={<Print />} />
+           <Route path="/admin" element={<Admin />} />
+       <Route path="/factory-reset" element={<FactoryReset />} />
                 <Route path="/bom-parser" element={<BOMParser />} />
                 <Route path="/fabricators" element={<Fabricators />} />
                 <Route path="/profile" element={<Profile user={user} onLogout={handleLogout} />} />
