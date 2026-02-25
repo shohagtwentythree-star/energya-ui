@@ -262,6 +262,7 @@ const toggleKeyboard = () => {
   );
   if (isDuplicate) {
     showFeedback(`Plate ${plateData.mark} already exists`, "error");
+   setInputValue("");
     return;
   }
 
@@ -502,7 +503,7 @@ const toggleKeyboard = () => {
   <div className="px-6 py-4 bg-slate-800/50 border-b border-slate-800 flex justify-between items-center">
     <div className="flex flex-col">
       <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest leading-tight">
-        Active Inventory
+        Plates ({filteredActivePlates.length})
       </h3>
       
       {/* 🕒 ENHANCED STATUS DISPLAY */}
@@ -543,17 +544,18 @@ const toggleKeyboard = () => {
   {/* LIST SECTION */}
   <div className="divide-y divide-slate-800/50">
     {filteredActivePlates.length > 0 ? (
-      filteredActivePlates.map((plate) => (
-        <PlateRow 
-          key={plate.mark} 
-          plate={plate} 
-          onRemove={removePlate} 
-          allPallets={allPallets}
-          activeCoord={activeCoord}
-          setActiveCoord={setActiveCoord}
-          setSearchParams={setSearchParams}
-        />
-      ))
+      filteredActivePlates.toReversed().map((plate) => (
+  <PlateRow 
+    key={plate.mark} 
+    plate={plate} 
+    onRemove={removePlate} 
+    allPallets={allPallets}
+    activeCoord={activeCoord}
+    setActiveCoord={setActiveCoord}
+    setSearchParams={setSearchParams}
+  />
+))
+
     ) : (
       <div className="py-20 text-center">
         <div className="text-slate-800 font-black text-4xl mb-2 tracking-tighter">EMPTY</div>
@@ -564,14 +566,6 @@ const toggleKeyboard = () => {
     )}
   </div>
 
-  {/* FOOTER STATS (Optional extra touch) */}
-  {filteredActivePlates.length > 0 && (
-    <div className="px-6 py-2 bg-slate-950/30 border-t border-slate-800/50 flex justify-end">
-      <span className="text-[9px] font-bold text-slate-600 uppercase tracking-widest">
-        Total Items: {filteredActivePlates.length}
-      </span>
-    </div>
-  )}
 </div>
 
 
