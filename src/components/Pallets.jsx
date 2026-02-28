@@ -126,12 +126,58 @@ const clearAllPlates = async () => {
 
 
   // Command Parser Trigger
-  useEffect(() => {
-    const val = inputValue.toUpperCase();
-    if (val.endsWith('ADD') || val.endsWith('OK') || val.endsWith('NEXT')) {
+  // --- ENHANCED COMMAND PARSER (With OK Confirmation) ---
+useEffect(() => {
+  const val = inputValue.toUpperCase().trim();
+  if (!val) return;
+
+  // 1. Listen for "ON [Number] OK/OKAY" 
+  // Matches: "ON 575 OK", "ON12345 OKAY", "ON 99 OK"
+  const orderMatch = val.match(/^ON\s*(\d+)\s*(OK|OKAY|ADD)$/);
+  if (orderMatch) {
+    const newOrder = orderMatch[1];
+    setOrderInput(newOrder); 
+    updateOrderNumberViaValue(newOrder);
+    setInputValue(''); 
+    return;
+  }
+
+  // 2. Listen for Coordinate Shorthand (Instant trigger)
+  // Logic: X+, X-, Y+, Y- or XPLUS, YMINUS
+  const coordMatch = val.match(/^([XY])\s*(\+|-|PLUS|MINUS)$/);
+  if (coordMatch) {
+    const axis = coordMatch[1].toLowerCase();
+    const op = coordMatch[2];
+    const increment = (op === '+' || op === 'PLUS') ? 1 : -1;
+    
+    handleCoordChange(axis, (Number(activeCoord[axis]) || 0) + increment);
+    setInputValue('');
+    return;
+  }
+
+  // 3. Listen for "DELETE" (Instant trigger)
+  if (val === 'DELETE') {
+    const lastPlate = currentPalletDoc?.plates?.[currentPalletDoc.plates.length - 1];
+    if (lastPlate) {
+     
+        removePlate(lastPlate.mark);
+      
+    } else {
+      showFeedback("Nothing to delete", "error");
+    }
+    setInputValue('');
+    return;
+  }
+
+  // 4. Standard Plate Add (Existing logic)
+  if (val.endsWith('ADD') || val.endsWith('OK') || val.endsWith('OKAY')) {
+    // We check if it's NOT an "ON" command before adding a plate
+    if (!val.startsWith('ON')) {
       addPlate();
     }
-  }, [inputValue]);
+  }
+}, [inputValue]);
+
 
   const showFeedback = (text, type) => setMessage({ text, type });
 
@@ -161,6 +207,37 @@ const toggleKeyboard = () => {
   setIsMobileMode(!isMobileMode);
   setShowKeypad(isMobileMode); // If switching to keypad, show it
 };
+
+// --- API HELPER FOR COMMAND BAR ---
+const updateOrderNumberViaValue = async (newOrder) => {
+  // If no pallet exists at these coords yet, we can't update it.
+  if (!currentPalletDoc?.id) {
+    showFeedback("Add a plate first to create the pallet", "error");
+    return;
+  }
+
+  const cleanOrder = newOrder.trim().toUpperCase();
+  
+  try {
+    const res = await fetch(`${API_PALLETS}/${currentPalletDoc.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderNumber: cleanOrder })
+    });
+
+    if (res.ok) {
+      showFeedback(`Order updated to: ${cleanOrder}`, "success");
+      // Refresh the list so the UI reflects the Lowdb change
+      fetchPallets();
+    } else {
+      showFeedback("Server rejected update", "error");
+    }
+  } catch (error) {
+    showFeedback("Network error - Update failed", "error");
+    console.error("Order Update Error:", error);
+  }
+};
+
 
 
   // 🔥 BUSINESS LOGIC: Plate Matching
@@ -213,7 +290,7 @@ const toggleKeyboard = () => {
   // and treats whatever is left as the Mark.
   const mark = str
     .replace(/[LWTH]\d+/g, '') // Remove dimension pairs
-    .replace(/(ADD|OK|NEXT)$/, '') // Remove command keywords
+    .replace(/(ADD|OK|OKAY)$/, '') // Remove command keywords
     .trim();
 
   return {
@@ -327,7 +404,7 @@ const toggleKeyboard = () => {
   };
 
   // Search Logic
-  const getSearchQuery = (input) => input.toUpperCase().replace(/(ADD|OK|NEXT)$/, '').replace(/([LWTH])(\d+)/g, '$1:$2');
+  const getSearchQuery = (input) => input.toUpperCase().replace(/(ADD|OK|OKAY)$/, '').replace(/([LWTH])(\d+)/g, '$1:$2');
   const query = getSearchQuery(inputValue);
   const activePlates = currentPalletDoc?.plates || [];
 

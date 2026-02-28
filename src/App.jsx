@@ -10,6 +10,7 @@ import Print from './components/Print';
 import Register from './components/Register';
 import Profile from './components/Profile';
 import Admin from './components/Admin';
+import VoiceDigits from './components/VoiceDigits';
 import FactoryReset from './components/FactoryReset';
 import Login from './components/Login'; 
 import AddDrawingView from './components/AddDrawingView'; 
@@ -207,6 +208,7 @@ export default function App() {
             <Layout user={user} onLogout={handleLogout}>
               <Routes>
                 <Route path="/cart" element={<Cart />} />
+                                <Route path="/v" element={<VoiceDigits />} />
                 <Route path="/backup" element={<BackupManager />} />
                 <Route path="/restore" element={<RestoreManager />} />
                 <Route path="/pallets" element={<Pallets />} />
