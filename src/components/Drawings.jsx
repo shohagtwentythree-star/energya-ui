@@ -39,6 +39,60 @@ export default function Drawings() {
   const showToast = useCallback((message, type = 'success') => {
     setNotification({ message, type });
   }, []);
+ 
+
+  // Calculate total plate hits for the search term
+  const totalMatchedPlates = useMemo(() => {
+    if (!searchTerm) return 0;
+    const lowerSearch = searchTerm.toLowerCase();
+    return drawings.reduce((acc, dwg) => {
+      const plateMatches = dwg.plates?.filter(p => p.mark?.toLowerCase().includes(lowerSearch)) || [];
+      // Sum up the quantities of matching plates
+      const count = plateMatches.reduce((sum, p) => sum + (Number(p.qty) * (Number(dwg.dwgQty) || 1)), 0);
+      return acc + count;
+    }, 0);
+  }, [drawings, searchTerm]);
+
+  const handleMouseMove = (e) => {
+    setCursorPos({ x: e.clientX, y: e.clientY, show: true });
+  };
+  
+  useEffect(() => {
+    // Push initial dummy history state
+    window.history.pushState(null, "", window.location.href);
+
+    const handleBackButton = (e) => {
+      const active = document.activeElement;
+      const isInput =
+        active.tagName === "INPUT" ||
+        active.tagName === "TEXTAREA" ||
+        active.isContentEditable;
+
+      // Only block if not typing
+      if (!isInput && e.key === "Backspace") {
+        window.history.pushState(null, "", window.location.href);
+        e.preventDefault();
+        e.stopPropagation();
+        console.log("Backspace prevented");
+      }
+    };
+
+    // Listen for keydown
+    document.addEventListener("keydown", handleBackButton, true);
+
+    // Catch popstate (browser back button / mobile swipe back)
+    const popStateHandler = () => {
+      window.history.pushState(null, "", window.location.href);
+    };
+    window.addEventListener("popstate", popStateHandler);
+
+    // Cleanup on unmount
+    return () => {
+      document.removeEventListener("keydown", handleBackButton, true);
+      window.removeEventListener("popstate", popStateHandler);
+    };
+  }, []);
+
 
   // --- DATA FETCHING ---
   const fetchDrawings = useCallback(async () => {
@@ -158,7 +212,7 @@ export default function Drawings() {
   );
 
   return (
-    <div className="w-full p-4 space-y-6 relative selection:bg-sky-500/30">
+    <div className="w-full p-2 space-y-6 relative selection:bg-sky-500/30">
       
       {/* NOTIFICATION TOAST */}
       {notification && (
@@ -171,9 +225,8 @@ export default function Drawings() {
       )}
 
       {/* HEADER */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 border-b border-slate-800 pb-8">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-2 border-b border-slate-800 pb-4">
         <div>
-          <h1 className="text-5xl font-black text-white italic tracking-tighter uppercase leading-none">Control<span className="text-sky-500">.</span>Panel</h1>
           <div className="flex gap-5 mt-4">
             <div className="flex flex-col">
                 <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Database Size</span>
@@ -217,7 +270,7 @@ export default function Drawings() {
               onClick={() => setActiveStatus(status)}
               className={`flex items-center gap-3 px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 snap-start whitespace-nowrap border-2 ${
                 isActive 
-                  ? 'bg-sky-600 border-sky-400 text-white shadow-xl shadow-sky-900/40 translate-y-[-2px]' 
+                  ? 'bg-sky-600 border-sky-400 text-white shadow-xl shadow-sky-900/40' 
                   : 'bg-slate-900/40 border-slate-800 text-slate-500 hover:border-slate-700 hover:text-slate-300'
               }`}
             >

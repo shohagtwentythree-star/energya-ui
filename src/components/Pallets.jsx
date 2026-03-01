@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 
 import Keypad from './Keypad';
@@ -25,7 +25,7 @@ export default function Pallets() {
   const [message, setMessage] = useState({ text: '', type: '' });
   const [inputValue, setInputValue] = useState('');
   const [orderInput, setOrderInput] = useState('');
-
+const inputRef = useRef(null);
   // 1. Initial State Logic
   const [activeCoord, setActiveCoord] = useState(() => {
     const coordsParam = searchParams.get('coords');
@@ -36,11 +36,14 @@ export default function Pallets() {
     const saved = localStorage.getItem('lastActiveCoord');
     return saved ? JSON.parse(saved) : { x: 0, y: 0 };
   });
+  
+  const [caretPos, setCaretPos] = useState({ x: 0, y: 0 });
 
   const activeZ = 0;
   
   const [showKeypad, setShowKeypad] = useState(false);
-
+  
+  
 
   // 2. Data Fetching (useCallback to prevent redundant renders)
   const fetchPallets = useCallback(async () => {
@@ -124,6 +127,92 @@ const clearAllPlates = async () => {
   }
 };
 
+// Place this function inside your Pallets component (or in a utils file
+
+const commandWords = ['OK', 'OKAY', 'DELETE', 'ORDER', 'NUMBER', 'ORDERNUMBER', 'BACK', 'CLEAR', 'ADD', 'ON', 'X+', 'X-', 'Y+', 'Y-'];
+
+const numberMap = {
+  'ZERO': '0', 'ONE': '1', 'TWO': '2', 'THREE': '3', 'FOUR': '4', 
+  'FIVE': '5', 'SIX': '6', 'SEVEN': '7', 'EIGHT': '8', 'NINE': '9', 
+  'TEN': '1', 'TWENTY': '2', 'THIRTY': '3', 'FORTY': '4', 'FIFTY': '5', 
+  'SIXTY': '6', 'SEVENTY': '7', 'EIGHTY': '8', 'NINETY': '9',
+  'PLUS': '+', 'MINUS': '-', 'XPLUS': 'X+', 'XMINUS': 'X-', 'YPLUS': 'Y+', 'YMINUS': 'Y-',
+  'NEXT': 'X+', 'PREVIOUS': 'X-', 'UP': 'Y+', 'DOWN': 'Y-'
+};
+
+const sanitizeCommandInput = (rawValue = "") => {
+  // If the user ends with a space, we must preserve it so they can keep typing
+  const endsWithSpace = rawValue.endsWith(" ");
+  
+  if (!rawValue) return "";
+
+  // 1. Clean: Allow A-Z, 0-9, +, - and spaces
+  let text = rawValue.toUpperCase()
+    .replace(/[^A-Z0-9\+\-\s]/g, '') // Remove symbols (keep spaces)
+    .replace(/([0-9])([A-Z])/g, '$1 $2') // 77A -> 77 A
+    .replace(/([A-Z])([0-9])/g, '$1 $2') // A77 -> A 77
+    .replace(/([A-Z0-9])([\+\-])/g, '$1 $2') // X+ -> X +
+    .replace(/([\+\-])([A-Z0-9])/g, '$1 $2'); // +7 -> + 7
+
+  // 2. Split into tokens (keeping empty strings to represent spaces)
+  let tokens = text.split(/\s/); 
+
+  // 3. Map Word-Numbers/Symbols and Filter
+  let mapped = tokens.map(token => {
+    if (token === "") return ""; // Preserve the space-gap
+    
+    // If it's a number-word like "TWO", convert to "2"
+    if (numberMap[token]) return numberMap[token];
+
+    // Keep if it's a prefix of a command or a number-word
+    const isCommandPrefix = commandWords.some(cmd => cmd.startsWith(token));
+    const isNumPrefix = Object.keys(numberMap).some(num => num.startsWith(token));
+    const isDigitOrSign = /^\d+$/.test(token) || token === '+' || token === '-';
+
+    if (isCommandPrefix || isNumPrefix || isDigitOrSign || token.length === 1) {
+      return token;
+    }
+
+    return null; // Mark for removal
+  }).filter(t => t !== null);
+
+  // 4. Merge Logic (Numbers and X+/Y-)
+  let merged = [];
+  for (let i = 0; i < mapped.length; i++) {
+    let current = mapped[i];
+    let prev = merged[merged.length - 1];
+
+    if (current === "") {
+        merged.push(""); 
+        continue;
+    }
+
+    // Merge adjacent numbers: "2" "" "2" -> "22"
+    if (prev !== undefined && /^\d+$/.test(current) && /^\d+$/.test(prev.replace(/\s/g,''))) {
+        merged[merged.length - 1] = prev + current;
+    } 
+    // Merge X/Y with +/-: "X" "" "+" -> "X+"
+    else if (prev !== undefined && (current === '+' || current === '-') && (prev === 'X' || prev === 'Y')) {
+        merged[merged.length - 1] = prev + current;
+    }
+    else {
+        merged.push(current);
+    }
+  }
+
+  // Final join: filter out extra internal empty strings but respect the trailing space
+  let result = merged.filter(t => t !== "").join(" ");
+  return endsWithSpace ? result + " " : result;
+};
+
+
+// Example Usage:
+// sanitizeCommandInput("Please ADD the order!! and then DELETE") 
+// Returns: "ADD DELETE"
+
+
+// Example usage:
+// sanitizeCommandInput("LIGHT! and some garbage WATER") -> "LIGHTWATER
 
   // Command Parser Trigger
   // --- ENHANCED COMMAND PARSER (With OK Confirmation) ---
@@ -131,19 +220,21 @@ useEffect(() => {
   const val = inputValue.toUpperCase().trim();
   if (!val) return;
 
-  // 1. Listen for "ON [Number] OK/OKAY" 
-  // Matches: "ON 575 OK", "ON12345 OKAY", "ON 99 OK"
-  const orderMatch = val.match(/^ON\s*(\d+)\s*(OK|OKAY|ADD)$/);
+  // 1. Listen for "ON" or "ORDERNUMBER" followed by [Number] and [Status]
+  // Matches: "ON 575 OK", "ORDERNUMBER 12345 ADD", "ON99 OKAY"
+  const orderMatch = val.match(/^(?:ON|ORDERNUMBER|ORDER NUMBER)\s*(\d+)\s*(OK|OKAY|ADD)$/);
+  
   if (orderMatch) {
-    const newOrder = orderMatch[1];
+    const newOrder = orderMatch[1]; // This is the digits (\d+)
     setOrderInput(newOrder); 
     updateOrderNumberViaValue(newOrder);
     setInputValue(''); 
     return;
   }
+  
+  
 
   // 2. Listen for Coordinate Shorthand (Instant trigger)
-  // Logic: X+, X-, Y+, Y- or XPLUS, YMINUS
   const coordMatch = val.match(/^([XY])\s*(\+|-|PLUS|MINUS)$/);
   if (coordMatch) {
     const axis = coordMatch[1].toLowerCase();
@@ -159,9 +250,7 @@ useEffect(() => {
   if (val === 'DELETE') {
     const lastPlate = currentPalletDoc?.plates?.[currentPalletDoc.plates.length - 1];
     if (lastPlate) {
-     
         removePlate(lastPlate.mark);
-      
     } else {
       showFeedback("Nothing to delete", "error");
     }
@@ -171,12 +260,23 @@ useEffect(() => {
 
   // 4. Standard Plate Add (Existing logic)
   if (val.endsWith('ADD') || val.endsWith('OK') || val.endsWith('OKAY')) {
-    // We check if it's NOT an "ON" command before adding a plate
-    if (!val.startsWith('ON')) {
+    // We check if it's NOT an "Order Command" before adding a plate
+    const isOrderCommand = val.startsWith('ON') || val.startsWith('ORDERNUMBER');
+    
+    if (!isOrderCommand) {
       addPlate();
     }
   }
+  
+  if (val.endsWith("BACK")) {
+  setInputValue((prev) => prev.slice(0, -6));
+  }
+  
+  if (val.endsWith("CLEAR")) {
+    setInputValue("");
+  }
 }, [inputValue]);
+
 
 
   const showFeedback = (text, type) => setMessage({ text, type });
@@ -238,6 +338,42 @@ const updateOrderNumberViaValue = async (newOrder) => {
   }
 };
 
+// prevent backspace
+useEffect(() => {
+    // Push initial dummy history state
+    window.history.pushState(null, "", window.location.href);
+
+    const handleBackButton = (e) => {
+      const active = document.activeElement;
+      const isInput =
+        active.tagName === "INPUT" ||
+        active.tagName === "TEXTAREA" ||
+        active.isContentEditable;
+
+      // Only block if not typing
+      if (!isInput && e.key === "Backspace") {
+        window.history.pushState(null, "", window.location.href);
+        e.preventDefault();
+        e.stopPropagation();
+        console.log("Backspace prevented");
+      }
+    };
+
+    // Listen for keydown
+    document.addEventListener("keydown", handleBackButton, true);
+
+    // Catch popstate (browser back button / mobile swipe back)
+    const popStateHandler = () => {
+      window.history.pushState(null, "", window.location.href);
+    };
+    window.addEventListener("popstate", popStateHandler);
+
+    // Cleanup on unmount
+    return () => {
+      document.removeEventListener("keydown", handleBackButton, true);
+      window.removeEventListener("popstate", popStateHandler);
+    };
+  }, []);
 
 
   // 🔥 BUSINESS LOGIC: Plate Matching
@@ -388,6 +524,31 @@ const updateOrderNumberViaValue = async (newOrder) => {
   }
 };
 
+const updateCaretPosition = () => {
+  const input = inputRef.current;
+  if (!input) return;
+
+  const rect = input.getBoundingClientRect();
+  const caretIndex = input.selectionStart;
+
+  // Create temporary span to measure text width
+  const dummy = document.createElement("span");
+  dummy.style.position = "absolute";
+  dummy.style.visibility = "hidden";
+  dummy.style.whiteSpace = "pre";
+  dummy.style.font = window.getComputedStyle(input).font;
+  dummy.textContent = input.value.substring(0, caretIndex);
+
+  document.body.appendChild(dummy);
+  const textWidth = dummy.getBoundingClientRect().width;
+  document.body.removeChild(dummy);
+
+  setCaretPos({
+    x: rect.left + textWidth + 10,
+    y: rect.top - 8
+  });
+};
+
 
 
 
@@ -420,6 +581,8 @@ const updateOrderNumberViaValue = async (newOrder) => {
         return acc;
       }, [])
     : [];
+    
+
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 p-3 font-sans selection:bg-sky-500/30">
@@ -525,16 +688,33 @@ const updateOrderNumberViaValue = async (newOrder) => {
       title={isMobileMode ? "Switch to Keypad" : "Switch to System Keyboard"}
     />
 
-    <input
-      type="text"
-      inputMode={isMobileMode ? "text" : "none"} 
-      onFocus={() => !isMobileMode && setShowKeypad(true)}
-      placeholder={isMobileMode ? "MOBILE MODE" : "KEYPAD MODE"}
-      className="flex-1 min-w-0 bg-transparent px-2 py-2 outline-none font-mono text-base md:text-lg text-sky-400 uppercase placeholder:text-slate-700"
-      value={inputValue}
-      onChange={(e) => setInputValue(e.target.value.replace(/\s/g, '').toUpperCase())}
-      onKeyDown={(e) => e.key === 'Enter' && addPlate()}
-    />
+   <input
+  ref={inputRef}
+  type="text"
+  inputMode={isMobileMode ? "text" : "none"}
+  onFocus={() => {
+    if (!isMobileMode) setShowKeypad(true);
+    updateCaretPosition();
+  }}
+  placeholder={isMobileMode ? "MOBILE MODE" : "KEYPAD MODE"}
+  className="flex-1 min-w-0 bg-transparent px-2 py-2 outline-none font-mono text-base md:text-lg text-sky-400 uppercase placeholder:text-slate-700 transition-all"
+  value={inputValue}
+  onChange={(e) => {
+    const sanitized = sanitizeCommandInput(e.target.value);
+    setInputValue(sanitized);
+
+    // Wait for state update before measuring caret
+    setTimeout(updateCaretPosition, 0);
+  }}
+  onClick={updateCaretPosition}
+  onKeyUp={(e) => {
+    updateCaretPosition();
+
+    if (e.key === "Enter") {
+      addPlate();
+    }
+  }}
+/>
     
     <button
       onClick={addPlate}
@@ -621,7 +801,7 @@ const updateOrderNumberViaValue = async (newOrder) => {
   {/* LIST SECTION */}
   <div className="divide-y divide-slate-800/50">
     {filteredActivePlates.length > 0 ? (
-      filteredActivePlates.toReversed().map((plate) => (
+      [...filteredActivePlates].reverse().map((plate) => (
   <PlateRow 
     key={plate.mark} 
     plate={plate} 

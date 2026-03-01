@@ -101,6 +101,42 @@ export default function CartBridge() {
   const isPlateInAnyPallet = useCallback((mark) => {
     return pallets.some(pal => pal.plates?.some(pl => pl.mark === mark));
   }, [pallets]);
+  
+  useEffect(() => {
+    // Push initial dummy history state
+    window.history.pushState(null, "", window.location.href);
+
+    const handleBackButton = (e) => {
+      const active = document.activeElement;
+      const isInput =
+        active.tagName === "INPUT" ||
+        active.tagName === "TEXTAREA" ||
+        active.isContentEditable;
+
+      // Only block if not typing
+      if (!isInput && e.key === "Backspace") {
+        window.history.pushState(null, "", window.location.href);
+        e.preventDefault();
+        e.stopPropagation();
+        console.log("Backspace prevented");
+      }
+    };
+
+    // Listen for keydown
+    document.addEventListener("keydown", handleBackButton, true);
+
+    // Catch popstate (browser back button / mobile swipe back)
+    const popStateHandler = () => {
+      window.history.pushState(null, "", window.location.href);
+    };
+    window.addEventListener("popstate", popStateHandler);
+
+    // Cleanup on unmount
+    return () => {
+      document.removeEventListener("keydown", handleBackButton, true);
+      window.removeEventListener("popstate", popStateHandler);
+    };
+  }, []);
 
   // --- ACTIONS ---
   const addToCart = async (plate, qty) => {
