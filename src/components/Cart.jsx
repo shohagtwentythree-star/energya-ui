@@ -229,11 +229,19 @@ export default function CartBridge() {
   }, [isModalOpen, customQty, selectedPlate, addToCart]);
 
   // --- RENDERING ---
-  const renderPlateCard = (p, i, isFulfilled = false) => {
+    const renderPlateCard = (p, i, isFulfilled = false) => {
     const stats = p.stats || getGlobalStats(p.mark);
-    const { totalRequired, totalPut, inCart, netRemaining } = stats;
+    const { totalRequired, totalPut, inCart, netRemaining, matches } = stats;
     const isUrgent = netRemaining > 0;
     const progress = totalRequired > 0 ? (totalPut / totalRequired) * 100 : 0;
+
+    // 1. Get the current pallet's order number
+    const currentPallet = pallets.find(pal => getCoordKey(pal) === coordKey);
+    const currentOrderNo = currentPallet?.orderNumber;
+
+    // 2. Check if any drawing needing this plate matches the pallet's order number
+    // We check the 'matches' array returned by getGlobalStats
+    const isOrderMatch = matches.some(m => m.orderNumber === currentOrderNo);
 
     const otherLocations = pallets.filter(pal => 
       pal.plates.some(pl => pl.mark === p.mark) && getCoordKey(pal) !== coordKey
@@ -243,15 +251,19 @@ export default function CartBridge() {
       <div key={p.mark || i} className={`group relative p-5 rounded-2xl border transition-all duration-300 ${
         isFulfilled ? 'bg-slate-900/40 border-slate-800 opacity-70' : 'bg-slate-900 border-sky-500/30 shadow-lg'
       }`}>
+        {/* ... (Keep the Top section with Mark and Stats the same) ... */}
         <div className="flex justify-between items-start mb-4">
           <div className="space-y-1">
             <h3 className="text-2xl font-mono font-black text-white">{p.mark}</h3>
             {isUrgent && (
-              <div className="inline-flex items-center gap-1.5 bg-sky-500/10 text-sky-400 text-[10px] px-2 py-1 rounded border border-sky-500/20 font-bold uppercase">
-                Demand: {netRemaining}
+              <div className={`inline-flex items-center gap-1.5 text-[10px] px-2 py-1 rounded border font-bold uppercase ${
+                isOrderMatch ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-sky-500/10 text-sky-400 border-sky-500/20"
+              }`}>
+                {isOrderMatch ? "Order Match" : "External Demand"}: {netRemaining}
               </div>
             )}
           </div>
+          {/* ... Stats rendering ... */}
           <div className="flex gap-4 text-right">
              {[
                { label: 'Req', val: totalRequired, color: 'text-slate-500' },
@@ -267,12 +279,13 @@ export default function CartBridge() {
         </div>
 
         <div className="h-1 w-full bg-slate-800 rounded-full mb-4 overflow-hidden">
-            <div className="h-full bg-emerald-500 transition-all duration-700" style={{ width: `${Math.min(100, progress)}%` }}></div>
+            <div className={`h-full transition-all duration-700 ${isOrderMatch ? 'bg-emerald-500' : 'bg-sky-500'}`} style={{ width: `${Math.min(100, progress)}%` }}></div>
         </div>
 
+        {/* ... Other Locations ... */}
         {otherLocations.length > 0 && (
           <div className="mb-4 space-y-2">
-            <div className="flex items-center gap-2"><div className="h-[px] flex-1 bg-slate-800"></div><span className="text-[8px] font-black text-slate-500 uppercase">Other Stacks</span><div className="h-[1px] flex-1 bg-slate-800"></div></div>
+            <div className="flex items-center gap-2"><div className="h-[1px] flex-1 bg-slate-800"></div><span className="text-[8px] font-black text-slate-500 uppercase">Other Stacks</span><div className="h-[1px] flex-1 bg-slate-800"></div></div>
             <div className="flex flex-wrap gap-2">
               {otherLocations.map((loc, idx) => (
                 <button key={idx} onClick={() => setActiveCoord({ x: loc.x, y: loc.y, z: loc.z })} className="flex items-center gap-2 bg-slate-950 border border-slate-800 hover:border-sky-500/50 px-2 py-1 rounded-md transition-all">
@@ -284,19 +297,74 @@ export default function CartBridge() {
           </div>
         )}
 
-        <div className="flex gap-2">
-          <button disabled={netRemaining === 0} onClick={() => addToCart(p, netRemaining)} 
-            className={`flex-1 py-3 rounded-xl font-black text-xs transition-all uppercase flex justify-center items-center gap-2 ${
-              netRemaining > 0 ? "bg-sky-600 text-white shadow-lg" : "bg-slate-800 text-slate-600"
-            }`}>
-              {netRemaining > 0 ? <>Pick All <span className="bg-white/20 px-2 py-0.5 rounded">{netRemaining}</span></> : <><Icons.Check/> Fulfilled</>}
-          </button>
-          <button onClick={() => { setSelectedPlate({ ...p, stats }); setCustomQty(netRemaining || 1); setIsModalOpen(true); }} 
-            className="w-12 bg-slate-800 rounded-xl font-bold border border-slate-700 text-slate-400 flex items-center justify-center">±</button>
-        </div>
+        {/* UPDATED BUTTONS SECTION */}
+{/* UPDATED DUAL-BUTTON ACTION BAR: MUTUALLY EXCLUSIVE + CONFIRMATION */}
+<div className="flex gap-2 items-stretch h-12">
+  
+  {/* 1. PRIMARY: PICK ORDER (Green, Big) - No confirmation needed for direct matches */}
+  <button 
+    disabled={!isOrderMatch || netRemaining === 0} 
+    onClick={() => addToCart(p, netRemaining)} 
+    className={`flex-[3] rounded-xl font-black text-xs transition-all uppercase flex justify-center items-center gap-2 shadow-lg active:scale-95 ${
+      isOrderMatch && netRemaining > 0 
+        ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/20" 
+        : "bg-slate-900/50 text-slate-700 cursor-not-allowed opacity-30 border border-slate-800"
+    }`}
+  >
+    {isOrderMatch && netRemaining > 0 ? (
+      <>
+        Pick Order 
+        <span className="bg-white/20 px-2 py-0.5 rounded ml-1 font-mono text-sm">{netRemaining}</span>
+      </>
+    ) : (
+      <span className="tracking-widest">No Match</span>
+    )}
+  </button>
+
+  {/* 2. SECONDARY: PICK OTHER (Blue, Square) - ASKS FOR CONFIRMATION */}
+  <button 
+    disabled={isOrderMatch || netRemaining === 0}
+    onClick={() => {
+      if (window.confirm(`Divert ${netRemaining} pcs to a DIFFERENT Order?`)) {
+        addToCart(p, netRemaining);
+      }
+    }}
+    title="Pick for other drawings"
+    className={`w-16 rounded-xl transition-all flex items-center justify-center active:scale-90 border ${
+      !isOrderMatch && netRemaining > 0 
+        ? "bg-sky-600 border-sky-400 text-white shadow-lg" 
+        : "bg-slate-900/50 border-slate-800 text-slate-700 cursor-not-allowed opacity-30"
+    }`}
+  >
+    {!isOrderMatch && netRemaining > 0 ? (
+      <div className="flex gap-2 items-center">
+        <Icons.Cart className="w-4 h-4" />
+        <span className="text-[14px] font-black">{netRemaining}</span>
+      </div>
+    ) : (
+      <Icons.Check className="w-4 h-4 opacity-40" />
+    )}
+  </button>
+
+  {/* 3. TERTIARY: CUSTOM (Gray) */}
+  <button 
+    disabled={netRemaining === 0}
+    onClick={() => { setSelectedPlate({ ...p, stats }); setCustomQty(netRemaining || 1); setIsModalOpen(true); }} 
+    className={`w-12 rounded-xl font-bold border flex items-center justify-center transition-all active:scale-90 ${
+      netRemaining > 0 
+        ? "bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700" 
+        : "bg-slate-900/50 border-slate-800 text-slate-700 opacity-30"
+    }`}
+  >
+    ±
+  </button>
+</div>
+
+
       </div>
     );
   };
+
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">

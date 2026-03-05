@@ -68,80 +68,114 @@ const CartPalletsView = ({
       </div>
       
       {/* --- GLOBAL SEARCH RESULTS --- */}
-      {searchTerm && (
-        <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300 mb-6">
-          <div className="flex items-center gap-2 px-1">
-            <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Global Discovery</span>
-            <div className="h-[1px] flex-1 bg-amber-500/20"></div>
+{searchTerm && (
+  <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-400 mb-8 px-1">
+    {/* SEARCH HEADER */}
+    <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
+        <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
+        <span className="text-[11px] font-black text-slate-300 uppercase tracking-[0.2em]">Global Discovery</span>
+      </div>
+      <div className="h-[1px] flex-1 bg-gradient-to-r from-amber-500/30 to-transparent"></div>
+    </div>
+    
+    <div className="grid grid-cols-1 gap-2 max-h-72 overflow-y-auto pr-1 custom-scrollbar">
+      {(() => {
+        const globalMatches = [];
+const searchLower = searchTerm.toLowerCase();
+
+pallets.forEach(pal => {
+  pal.plates.forEach(pl => {
+    const markLower = pl.mark.toLowerCase();
+    if (markLower.includes(searchLower)) {
+      // Calculate match type: 0 for exact, 1 for partial
+      const priority = markLower === searchLower ? 0 : 1;
+      globalMatches.push({ ...pl, pallet: pal, priority });
+    }
+  });
+});
+
+// Sort by priority (0 comes before 1)
+globalMatches.sort((a, b) => a.priority - b.priority);
+
+
+        if (globalMatches.length === 0) return (
+          <div className="py-8 text-center bg-slate-950/40 border border-dashed border-slate-800 rounded-2xl">
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.15em]">No Data Matches Found</p>
           </div>
+        );
+
+        return globalMatches.map((match, idx) => {
+          const isCurrent = getCoordKey(match.pallet) === coordKey;
           
-          <div className="grid grid-cols-1 gap-1.5 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
-            {(() => {
-              const globalMatches = [];
-              pallets.forEach(pal => {
-                pal.plates.forEach(pl => {
-                  if (pl.mark.toLowerCase().includes(searchTerm.toLowerCase())) {
-                    globalMatches.push({ ...pl, pallet: pal });
-                  }
-                });
-              });
+          return (
+            <div 
+              key={idx} 
+              className={`group flex items-center p-1 rounded-xl border transition-all duration-300 ${
+                isCurrent 
+                  ? 'bg-sky-500/5 border-sky-500/30 shadow-lg shadow-sky-950/20' 
+                  : 'bg-slate-900/40 border-slate-800 hover:border-amber-500/30 hover:bg-slate-900/80'
+              }`}
+            >
+              {/* SECTION 1: PLATE MARK (The "ID") */}
+              <div className={`flex flex-col justify-center px-4 py-2 min-w-[100px] border-r ${
+                isCurrent ? 'border-sky-500/20' : 'border-slate-800'
+              }`}>
+                <span className="text-[8px] font-black text-slate-500 uppercase tracking-tighter mb-0.5">Plate ID</span>
+                <span className={`font-mono font-black text-sm tracking-tight ${
+                  isCurrent ? 'text-sky-400' : 'text-white'
+                }`}>
+                  {match.mark}
+                </span>
+              </div>
 
-              if (globalMatches.length === 0) return (
-                <div className="py-4 text-center bg-slate-900/20 border border-dashed border-slate-800 rounded-xl">
-                  <span className="text-[10px] text-slate-600 font-bold uppercase tracking-widest">No Matches Found</span>
+              {/* SECTION 2: TELEMETRY (Loc & Order) */}
+              <div className="flex-1 px-4 grid grid-cols-2 gap-4">
+                {/* Location Display */}
+                <div className="flex flex-col">
+                  <span className="text-[8px] font-black text-slate-500 uppercase tracking-tighter mb-0.5">Location</span>
+                  <span className={`text-xs font-mono font-bold ${isCurrent ? 'text-sky-300' : 'text-slate-300'}`}>
+                    {match.pallet.x}/{match.pallet.y}
+                  </span>
                 </div>
-              );
 
-              return globalMatches.map((match, idx) => {
-                const isCurrent = getCoordKey(match.pallet) === coordKey;
-                
-                return (
-                  <div 
-                    key={idx} 
-                    className={`flex items-center justify-between p-1 pr-2 rounded-xl border transition-all ${
-                      isCurrent 
-                        ? 'bg-sky-500/10 border-sky-500/40 shadow-[inset_0_0_12px_rgba(14,165,233,0.1)]' 
-                        : 'bg-slate-900 border-slate-800 hover:border-slate-700 hover:bg-slate-800/80'
-                    }`}
-                  >
-                    <div className="flex items-center">
-                      <div className={`px-4 py-2 rounded-l-lg font-mono font-black text-sm tracking-tight border-r ${
-                        isCurrent ? 'text-sky-400 border-sky-500/20' : 'text-white border-slate-800'
-                      }`}>
-                        {match.mark}
-                      </div>
-                      
-                      <div className="px-4 flex items-center gap-2">
-                        <span className="text-[9px] text-slate-500 font-black uppercase tracking-tighter">Loc</span>
-                        <span className={`text-xs font-mono font-bold ${isCurrent ? 'text-sky-300' : 'text-slate-400'}`}>
-                          {match.pallet.x}.{match.pallet.y}.{match.pallet.z}
-                        </span>
-                      </div>
-                    </div>
+                {/* Order Number Display */}
+                <div className="flex flex-col">
+                  <span className="text-[8px] font-black text-slate-500 uppercase tracking-tighter mb-0.5">Order Number</span>
+                  <span className="text-xs font-black text-slate-400 group-hover:text-amber-500 transition-colors">
+                    # {match.pallet.orderNumber || 'UNSET'}
+                  </span>
+                </div>
+              </div>
 
-                    {isCurrent ? (
-                      <div className="px-3 py-1 bg-sky-500/20 rounded-lg border border-sky-500/30">
-                         <span className="text-[8px] font-black text-sky-400 uppercase">Viewing</span>
-                      </div>
-                    ) : (
-                      <button 
-                        onClick={() => {
-                          setSearchTerm("");
-                          setActiveCoord({ x: match.pallet.x, y: match.pallet.y});
-                        }}
-                        type="button"
-                        className="flex items-center gap-2 bg-slate-950 hover:bg-amber-500 text-slate-400 hover:text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all border border-slate-800 hover:border-amber-400 group/btn"
-                      >
-                        Jump to {Icons.ArrowRight && <Icons.ArrowRight className="group-hover/btn:translate-x-0.5 transition-transform" />}
-                      </button>
-                    )}
+              {/* SECTION 3: ACTION */}
+              <div className="pr-1">
+                {isCurrent ? (
+                  <div className="px-3 py-2 bg-sky-500/10 rounded-lg border border-sky-500/20">
+                     <span className="text-[9px] font-black text-sky-500 uppercase">Active</span>
                   </div>
-                );
-              });
-            })()}
-          </div>
-        </div>
-      )}
+                ) : (
+                  <button 
+                    onClick={() => {
+                      setSearchTerm("");
+                      setActiveCoord({ x: match.pallet.x, y: match.pallet.y});
+                    }}
+                    type="button"
+                    className="flex items-center gap-2 bg-slate-950 text-slate-500 hover:text-white px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all border border-slate-800 hover:border-amber-500 hover:bg-amber-600 group/btn"
+                  >
+                    Jump
+                    <Icons.ArrowRight size={12} className="group-hover/btn:translate-x-1 transition-transform" />
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        });
+      })()}
+    </div>
+  </div>
+)}
+
 
       {/* 2. COORD NAVIGATION DASHBOARD */}
       <div className="bg-slate-900/40 p-3 rounded-2xl border border-slate-800/50 backdrop-blur-sm">

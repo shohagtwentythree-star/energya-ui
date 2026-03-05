@@ -573,14 +573,47 @@ const updateCaretPosition = () => {
     ? activePlates.filter(p => `${p.mark} L:${p.length} W:${p.width} T:${p.thickness} H:${p.numberOfHoles}`.toUpperCase().includes(query))
     : activePlates;
 
-  const globalMatches = query.length > 1
-    ? allPallets.reduce((acc, pallet) => {
-        if (pallet.x === activeCoord.x && pallet.y === activeCoord.y) return acc;
-        const matches = pallet.plates.filter(p => `${p.mark} L:${p.length} W:${p.width} T:${p.thickness} H:${p.numberOfHoles}`.toUpperCase().includes(query));
-        if (matches.length > 0) acc.push({ ...pallet, matches });
-        return acc;
-      }, [])
-    : [];
+  const globalMatches = query.length > 0
+  ? allPallets.reduce((acc, pallet) => {
+      // 1. Skip active pallet
+      if (pallet.x === activeCoord.x && pallet.y === activeCoord.y) return acc;
+
+      const upperQuery = query.toUpperCase();
+
+      // 2. Separate plates into priority buckets
+      const exactMarkMatches = [];
+      const partialMatches = [];
+
+      pallet.plates.forEach(p => {
+        const mark = p.mark.toUpperCase();
+        const fullString = `${mark} L:${p.length} W:${p.width} T:${p.thickness} H:${p.numberOfHoles}`.toUpperCase();
+
+        if (mark === upperQuery) {
+          // Priority 1: The Mark matches exactly what they typed
+          exactMarkMatches.push(p);
+        } else if (fullString.includes(upperQuery)) {
+          // Priority 2: The query is found somewhere in the dimensions or mark
+          partialMatches.push(p);
+        }
+      });
+
+      // 3. Combine them (Exacts first)
+      const combined = [...exactMarkMatches, ...partialMatches];
+
+      if (combined.length > 0) {
+        acc.push({ 
+          ...pallet, 
+          matches: combined,
+          // Flag this pallet if it contains a top-tier match
+          priority: exactMarkMatches.length > 0 ? 2 : 1 
+        });
+      }
+      return acc;
+    }, [])
+    // 4. Sort the pallets so the ones with exact matches are at the top of the list
+    .sort((a, b) => b.priority - a.priority)
+  : [];
+
     
 
 
@@ -756,72 +789,104 @@ const updateCaretPosition = () => {
         {/* ACTIVE LIST */}
 {/* ACTIVE LIST */}
 <div className="bg-slate-900 rounded-3xl border border-slate-800 overflow-hidden shadow-xl">
-  {/* HEADER SECTION */}
-  <div className="px-6 py-4 bg-slate-800/50 border-b border-slate-800 flex justify-between items-center">
-    <div className="flex flex-col">
-      <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest leading-tight">
-        Plates ({filteredActivePlates.length})
-      </h3>
-      
-      {/* 🕒 ENHANCED STATUS DISPLAY */}
-      {currentPalletDoc?.lastActivity && (
-        <div className="flex items-center gap-2 mt-1.5 animate-in fade-in slide-in-from-left-2 duration-300">
-          <div className="flex items-center gap-1.5 px-2 py-0.5 bg-sky-500/10 border border-sky-500/20 rounded-md">
-            <span className="text-[9px] font-bold text-sky-600 uppercase tracking-tighter">Last Added</span>
-            <span className="text-[11px] font-mono font-black text-sky-400 uppercase">
-              {currentPalletDoc.lastPlateMark || "---"}
-            </span>
-          </div>
-<span className="text-[10px] font-mono text-slate-500 font-bold italic">
-  @ {new Date(currentPalletDoc.lastActivity).toLocaleString('en-GB', { 
-      day: '2-digit',
-      month: 'short',
-      hour: '2-digit', 
-      minute: '2-digit' 
-    })}
-</span>
-
-        </div>
-      )}
+ <div className="px-5 py-3 bg-slate-900/40 backdrop-blur-md border-b border-slate-800/60 flex items-center justify-between gap-6 group">
+  
+  {/* LEFT: ICON & COUNT */}
+  <div className="flex items-center gap-3">
+    <div className="p-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]">
+      {/* PLATE ICON (Simplified SVG) */}
+      <svg className="w-5 h-5 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+        <rect x="3" y="6" width="18" height="12" rx="2" />
+        <path d="M7 12h10M7 9h2m6 0h2m-8 6h6" strokeLinecap="round" />
+      </svg>
     </div>
-    
-    {/* CLEAR ALL BUTTON */}
+    <div className="flex flex-col">
+      <span className="text-[10px] font-black text-emerald-500/50 uppercase tracking-[0.2em] leading-none">Status</span>
+      <span className="text-sm font-mono font-bold text-slate-200">{filteredActivePlates.length} <span className="text-[10px] text-slate-500">UNIT(S)</span></span>
+    </div>
+  </div>
+
+  {/* MIDDLE: LAST ACTIVITY (Single Row Telemetry) */}
+  {currentPalletDoc?.lastActivity && (
+    <div className="flex-1 flex items-center gap-4 border-l border-slate-800 pl-6 animate-in fade-in slide-in-from-left-4 duration-500">
+      
+      {/* Last Mark Badge */}
+      <div className="flex flex-col">
+        <span className="text-[9px] font-bold text-sky-500/60 uppercase tracking-widest mb-0.5">Last Entry</span>
+        <div className="flex items-center gap-2">
+          <span className="px-2 py-0.5 bg-sky-500/10 text-sky-400 font-mono text-xs font-black rounded border border-sky-500/20">
+            {currentPalletDoc.lastPlateMark || "---"}
+          </span>
+          <span className="text-[11px] font-medium text-slate-500">
+            {new Date(currentPalletDoc.lastActivity).toLocaleTimeString('en-GB', { 
+              hour: '2-digit', 
+              minute: '2-digit' 
+            })}
+          </span>
+        </div>
+      </div>
+
+      {/* Subtle Date Vertical Divider */}
+      <div className="h-8 w-px bg-gradient-to-b from-transparent via-slate-700 to-transparent" />
+
+      {/* Date */}
+      <div className="hidden sm:flex flex-col">
+        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Session Date</span>
+        <span className="text-[11px] font-mono text-slate-400 font-bold">
+           {new Date(currentPalletDoc.lastActivity).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+        </span>
+      </div>
+    </div>
+  )}
+
+  {/* RIGHT: ACTION BUTTONS */}
+  <div className="flex items-center gap-2">
     <button 
       onClick={clearAllPlates}
       disabled={!currentPalletDoc?.plates?.length}
-      className="p-1.5 rounded-xl bg-red-800/10 text-red-800 hover:bg-red-600 hover:text-white disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-red-800 transition-all border border-red-700/20"
-      title="Clear all plates"
+      className="group/btn p-2 rounded-lg bg-slate-800/40 text-slate-500 hover:bg-red-500/10 hover:text-red-500 disabled:opacity-10 transition-all border border-slate-700/50 hover:border-red-500/30"
+      title="Format / Clear All"
     >
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+      <svg className="w-5 h-5 transition-transform group-hover/btn:rotate-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
       </svg>
     </button>
   </div>
+</div>
 
-  {/* LIST SECTION */}
-  <div className="divide-y divide-slate-800/50">
-    {filteredActivePlates.length > 0 ? (
-      [...filteredActivePlates].reverse().map((plate) => (
-  <PlateRow 
-    key={plate.mark} 
-    plate={plate} 
-    onRemove={removePlate} 
-    allPallets={allPallets}
-    activeCoord={activeCoord}
-    setActiveCoord={setActiveCoord}
-    setSearchParams={setSearchParams}
-  />
-))
 
-    ) : (
-      <div className="py-20 text-center">
-        <div className="text-slate-800 font-black text-4xl mb-2 tracking-tighter">EMPTY</div>
-        <p className="text-slate-600 text-[10px] uppercase tracking-[0.3em] font-bold">
-          No plates at this location
-        </p>
+{/* LIST SECTION */}
+<div className="divide-y divide-slate-800/50">
+  {filteredActivePlates.length > 0 ? (
+    [...filteredActivePlates].reverse().map((plate, index) => (
+      <div 
+        key={plate.mark} 
+        className={`${
+          index % 2 === 0 
+            ? 'bg-transparent' 
+            : 'bg-slate-700/20'
+        } transition-colors hover:bg-slate-800/40`}
+      >
+        <PlateRow 
+          plate={plate} 
+          onRemove={removePlate} 
+          allPallets={allPallets}
+          activeCoord={activeCoord}
+          setActiveCoord={setActiveCoord}
+          setSearchParams={setSearchParams}
+        />
       </div>
-    )}
-  </div>
+    ))
+  ) : (
+    /* Empty state if needed */
+    <div className="p-8 text-center text-slate-500 text-xs font-bold uppercase tracking-widest">
+      No plates found
+    </div>
+  )}
+</div>
+
+
+
 
 </div>
 
@@ -834,13 +899,50 @@ const updateCaretPosition = () => {
               <div className="h-[1px] flex-1 bg-gradient-to-r from-emerald-500/20 to-transparent"></div>
             </div>
             {globalMatches.map((result, i) => (
-              <div key={i} className="bg-slate-900/60 rounded-2xl border border-emerald-500/20 overflow-hidden">
-                <div className="bg-emerald-500/5 p-3 flex justify-between items-center border-b border-emerald-500/10">
-                  <span className="text-[10px] font-black text-emerald-500 tracking-tighter">LOC: [{result.x}, {result.y}] — #{result.orderNumber || 'NO-ORD'}</span>
-                  <button onClick={() => { setSearchParams({}, { replace: true }); setActiveCoord({ x: result.x, y: result.y }); }} className="text-[10px] font-black text-sky-500 hover:underline">JUMP TO</button>
-                </div>
-                {result.matches.map((p) => <PlateRow key={p.mark} plate={p} />)}
-              </div>
+<div key={i} className="group bg-slate-900/40 backdrop-blur-sm rounded-xl border border-emerald-500/10 hover:border-emerald-500/30 transition-all duration-300 overflow-hidden shadow-lg">
+  {/* Header Section */}
+  <div className="bg-emerald-500/10 px-4 py-2.5 flex justify-between items-center border-b border-emerald-500/10">
+    <div className="flex items-center gap-3">
+      {/* Visual Coordinate Badge */}
+      <div className="flex flex-col">
+        <span className="text-[10px] uppercase font-bold text-emerald-500/60 leading-none mb-1">Coordinates</span>
+        <span className="text-sm font-mono font-bold text-emerald-400 tracking-tight">
+          {result.x}<span className="text-emerald-800 mx-1">/</span>{result.y}
+        </span>
+      </div>
+      
+      {/* Order Divider */}
+      <div className="h-6 w-[1px] bg-emerald-500/20 mx-1" />
+      
+      {/* Order Number */}
+      <div className="flex flex-col">
+        <span className="text-[10px] uppercase font-bold text-emerald-500/60 leading-none mb-1">Order</span>
+        <span className="text-xs font-black text-slate-300">
+          #{result.orderNumber || 'PENDING'}
+        </span>
+      </div>
+    </div>
+
+    {/* Action Button */}
+    <button 
+      onClick={() => { setSearchParams({}, { replace: true }); setActiveCoord({ x: result.x, y: result.y }); }} 
+      className="px-3 py-1.5 rounded-lg bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 text-[11px] font-bold transition-colors border border-sky-500/20 flex items-center gap-1"
+    >
+      JUMP TO
+      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+      </svg>
+    </button>
+  </div>
+
+  {/* Content Section */}
+  <div className="p-1">
+    {result.matches.map((p) => (
+      <PlateRow key={p.mark} plate={p} />
+    ))}
+  </div>
+</div>
+
             ))}
           </div>
         )}
@@ -880,33 +982,63 @@ const PlateRow = ({ plate, onRemove, allPallets = [], activeCoord, setActiveCoor
         </div>
 {onRemove && (
   <button 
-    /* Changed from onDoubleClick to onClick for responsiveness */
-    onClick={() => {
-      if(window.confirm('Delete this plate?')) onRemove(plate.mark)
-    }} 
-    /* Removed opacity-0 so it's visible on mobile; added shrink-0 */
-    className="shrink-0 p-3 rounded-xl bg-red-500/10 text-red-800 hover:bg-red-600 hover:text-white transition-all ml-4"
-  >
-    <Icons.Trash className="w-5 h-5" /> 
-  </button>
+  onClick={() => {
+    if(window.confirm('Delete this plate?')) onRemove(plate.mark)
+  }} 
+  className="group/btn shrink-0 p-2 rounded-lg bg-slate-800/40 text-slate-500 hover:bg-red-500/10 hover:text-red-500 disabled:opacity-10 transition-all border border-slate-700/50 hover:border-red-500/30 ml-4"
+  title="Delete Plate"
+>
+  <Icons.Trash className="w-5 h-5 transition-transform group-hover/btn:rotate-12" /> 
+</button>
+
 )}
 
       </div>
 
-      {otherLocations.length > 0 && (
-        <div className="mt-4 pt-3 border-t border-slate-800/50">
-          <div className="flex items-center gap-2 mb-2 text-[9px] font-black text-slate-500 uppercase tracking-widest"><Icons.Link /> Stocked Elsewhere</div>
-          <div className="flex flex-wrap gap-2">
-            {otherLocations.map((loc, idx) => (
-              <button key={idx} onClick={() => { setSearchParams({}, { replace: true }); setActiveCoord({ x: loc.x, y: loc.y }); }} className="flex items-center gap-2 bg-slate-950 border border-slate-800 hover:border-sky-500/50 pl-2 pr-1 py-1 rounded-md transition-all group/jump shadow-sm">
-                <span className="text-[10px] font-mono text-emerald-400 font-bold">LOC: {loc.x}.{loc.y}</span>
-                <span className="text-[10px] text-slate-400 font-bold uppercase truncate max-w-[70px]"># {loc.orderNumber || 'NO-ORD'}</span>
-                <div className="p-1.5 bg-slate-900 group-hover/jump:bg-sky-600 text-slate-500 group-hover/jump:text-white rounded transition-colors"><Icons.ArrowRight /></div>
-              </button>
-            ))}
+{otherLocations.length > 0 && (
+  <div className="mt-4 flex flex-wrap items-center gap-2">
+    
+    {/* 1. STATUS INDICATOR (Minimal Header) */}
+    <div className="flex items-center gap-1.5 mr-1">
+      <div className="p-1 bg-emerald-500/10 rounded border border-emerald-500/20">
+        <Icons.Link size={10} className="text-emerald-500" />
+      </div>
+      <span className="text-[10px] font-black text-slate-500 font-mono tracking-tighter">
+        {otherLocations.length}
+      </span>
+    </div>
+
+    {/* 2. LOCATION CHIPS */}
+    {otherLocations.map((loc, idx) => (
+      <button 
+        key={idx} 
+        onClick={() => { setSearchParams({}, { replace: true }); setActiveCoord({ x: loc.x, y: loc.y }); }} 
+        className="group flex items-center bg-slate-900 border border-slate-800 hover:border-sky-500/50 rounded-md transition-all duration-200 overflow-hidden shadow-sm"
+      >
+        {/* Coordinate Area */}
+        <div className="px-2 py-1 border-r border-slate-800 bg-slate-950/30 group-hover:border-sky-500/20">
+          <span className="text-[11px] font-mono font-bold text-emerald-400 group-hover:text-emerald-300">
+            {loc.x}/{loc.y}
+          </span>
+        </div>
+
+        {/* Info Area */}
+        <div className="px-2 py-1 flex items-center gap-2">
+          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">
+            #{loc.orderNumber || '---'}
+          </span>
+          
+          <div className="text-slate-600 group-hover:text-sky-400 transition-colors">
+            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
+              <path d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
           </div>
         </div>
-      )}
+      </button>
+    ))}
+  </div>
+)}
+
 
       {plate.drawings?.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
